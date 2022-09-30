@@ -18,6 +18,7 @@ pub enum ResolveError {
     Unresolvable,
     InvalidType,
     IntegerRangeError,
+    NoPartialMemberData,
     Other(AnyError),
 }
 
@@ -32,6 +33,7 @@ impl fmt::Display for ResolveError {
             ResolveError::Unresolvable => write!(f, "paremeter is unresolvable"),
             ResolveError::InvalidType => write!(f, "parameter has invalid type"),
             ResolveError::IntegerRangeError => write!(f, "parameter is out of range"),
+            ResolveError::NoPartialMemberData => write!(f, "no partial member data available"),
             ResolveError::Other(error) => error.fmt(f),
         }
     }
@@ -178,7 +180,7 @@ impl Resolve for User {
     }
 }
 
-impl Resolve for Option<PartialMember> {
+impl Resolve for PartialMember {
     const KIND: CommandOptionType = CommandOptionType::User;
 
     fn resolve<'a>(
@@ -186,7 +188,8 @@ impl Resolve for Option<PartialMember> {
         options: impl Iterator<Item = &'a CommandDataOption>,
     ) -> ResolveResult<Self> {
         find_and_resolve_option::<Self>(name, options).and_then(|value| match value {
-            CommandDataOptionValue::User(_, value) => Ok(value.clone()),
+            CommandDataOptionValue::User(_, Some(value)) => Ok(value.clone()),
+            CommandDataOptionValue::User(_, None) => Err(ResolveError::NoPartialMemberData),
             _ => Err(ResolveError::InvalidType),
         })
     }
