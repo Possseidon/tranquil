@@ -17,6 +17,7 @@ pub enum ResolveError {
     Missing,
     Unresolvable,
     InvalidType,
+    IntegerRangeError,
     Other(AnyError),
 }
 
@@ -30,6 +31,7 @@ impl fmt::Display for ResolveError {
             ResolveError::Missing => write!(f, "parameter not specified"),
             ResolveError::Unresolvable => write!(f, "paremeter is unresolvable"),
             ResolveError::InvalidType => write!(f, "parameter has invalid type"),
+            ResolveError::IntegerRangeError => write!(f, "parameter is out of range"),
             ResolveError::Other(error) => error.fmt(f),
         }
     }
@@ -59,6 +61,14 @@ pub trait Resolve: Sized {
     const KIND: CommandOptionType;
     const REQUIRED: bool = true;
 
+    fn min_int_value() -> Option<i64> {
+        None
+    }
+
+    fn max_int_value() -> Option<i64> {
+        None
+    }
+
     fn resolve<'a>(
         name: &str,
         options: impl Iterator<Item = &'a CommandDataOption>,
@@ -83,7 +93,7 @@ impl<T: Resolve> Resolve for Option<T> {
 }
 
 macro_rules! impl_resolve {
-    ($command_option_type:ident => $t:ty) => {
+    ($($command_option_type:ident => $t:ty),* $(,)?) => { $(
         impl Resolve for $t {
             const KIND: CommandOptionType = CommandOptionType::$command_option_type;
 
@@ -97,21 +107,31 @@ macro_rules! impl_resolve {
                 })
             }
         }
-    };
+    )* }
 }
 
-impl_resolve!(String => String);
-impl_resolve!(Integer => i64);
-impl_resolve!(Boolean => bool);
-impl_resolve!(Channel => PartialChannel);
-impl_resolve!(Role => Role);
-impl_resolve!(Number => f64);
-impl_resolve!(Attachment => Attachment);
+impl_resolve! {
+    String => String,
+    Integer => i64,
+    Boolean => bool,
+    Channel => PartialChannel,
+    Role => Role,
+    Number => f64,
+    Attachment => Attachment,
+}
 
 macro_rules! impl_resolve_for_integer {
-    ($( $t:ty ),*) => {
-        $( impl Resolve for $t {
+    ($($t:ty),* $(,)?) => { $(
+        impl Resolve for $t {
             const KIND: CommandOptionType = CommandOptionType::Integer;
+
+            fn min_int_value() -> Option<i64> {
+                <$t>::MIN.try_into().ok()
+            }
+
+            fn max_int_value() -> Option<i64> {
+                <$t>::MAX.try_into().ok()
+            }
 
             fn resolve<'a>(
                 name: &str,
@@ -124,11 +144,11 @@ macro_rules! impl_resolve_for_integer {
                     _ => Err(ResolveError::InvalidType),
                 })
             }
-        } )*
-    };
+        }
+    )* }
 }
 
-impl_resolve_for_integer!(i8, i16, i32, i128, u8, u16, u32, u64, u128);
+impl_resolve_for_integer!(i8, i16, i32, i128, isize, u8, u16, u32, u64, u128, usize);
 
 impl Resolve for f32 {
     const KIND: CommandOptionType = CommandOptionType::Number;
@@ -138,7 +158,7 @@ impl Resolve for f32 {
         options: impl Iterator<Item = &'a CommandDataOption>,
     ) -> ResolveResult<Self> {
         find_and_resolve_option::<Self>(name, options).and_then(|value| match value {
-            CommandDataOptionValue::Number(value) => Ok(*value as Self),
+            CommandDataOptionValue::Number(value) => Ok(*value as _),
             _ => Err(ResolveError::InvalidType),
         })
     }
@@ -193,4 +213,48 @@ impl Resolve for Mentionable {
             _ => Err(ResolveError::InvalidType),
         })
     }
+}
+
+macro_rules! impl_resolve_for_bounded {
+    ($( $t:ty => $b:ident ),* $(,)?) => { $(
+        impl<const MIN: $t, const MAX: $t> Resolve for ::bounded_integer::$b<MIN, MAX> {
+            const KIND: CommandOptionType = CommandOptionType::Integer;
+
+            fn min_int_value() -> Option<i64> {
+                MIN.try_into().ok()
+            }
+
+            fn max_int_value() -> Option<i64> {
+                MAX.try_into().ok()
+            }
+
+            fn resolve<'a>(
+                name: &str,
+                options: impl Iterator<Item = &'a CommandDataOption>,
+            ) -> ResolveResult<Self> {
+                find_and_resolve_option::<i64>(name, options).and_then(|value| match *value {
+                    CommandDataOptionValue::Integer(value) => Self::new(
+                        <$t>::try_from(value).map_err(|error| ResolveError::Other(error.into()))?,
+                    )
+                    .ok_or(ResolveError::IntegerRangeError),
+                    _ => Err(ResolveError::InvalidType),
+                })
+            }
+        }
+    )* }
+}
+
+impl_resolve_for_bounded! {
+    i8 => BoundedI8,
+    i16 => BoundedI16,
+    i32 => BoundedI32,
+    i64 => BoundedI64,
+    i128 => BoundedI128,
+    isize => BoundedIsize,
+    u8 => BoundedU8,
+    u16 => BoundedU16,
+    u32 => BoundedU32,
+    u64 => BoundedU64,
+    u128 => BoundedU128,
+    usize => BoundedUsize,
 }

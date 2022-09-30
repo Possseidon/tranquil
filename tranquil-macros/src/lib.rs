@@ -39,6 +39,8 @@ pub fn slash(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     .name(::std::stringify!(#pat))
                     .kind(<#ty as ::tranquil::resolve::Resolve>::KIND)
                     .required(<#ty as ::tranquil::resolve::Resolve>::REQUIRED);
+                <#ty as ::tranquil::resolve::Resolve>::min_int_value().map(|value| option.min_int_value(value));
+                <#ty as ::tranquil::resolve::Resolve>::max_int_value().map(|value| option.max_int_value(value));
                 option
             }) as fn() -> ::serenity::builder::CreateApplicationCommandOption
         }
