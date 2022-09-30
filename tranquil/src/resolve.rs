@@ -38,12 +38,10 @@ impl fmt::Display for ResolveError {
 fn find_option<'a, T>(
     name: &str,
     mut options: impl Iterator<Item = &'a CommandDataOption>,
-    resolver: impl FnOnce(&'a CommandDataOption) -> ResolveResult<T>,
-) -> ResolveResult<T> {
+) -> ResolveResult<&'a CommandDataOption> {
     options
         .find(|option| option.name == name)
-        .map(resolver)
-        .unwrap_or(Err(ResolveError::Missing))
+        .ok_or(ResolveError::Missing)
 }
 
 fn resolve_option(option: &CommandDataOption) -> ResolveResult<&CommandDataOptionValue> {
@@ -54,7 +52,7 @@ fn find_and_resolve_option<'a, T>(
     name: &str,
     options: impl Iterator<Item = &'a CommandDataOption>,
 ) -> ResolveResult<&'a CommandDataOptionValue> {
-    find_option(name, options, resolve_option)
+    find_option::<T>(name, options).and_then(resolve_option)
 }
 
 pub trait Resolve: Sized {
