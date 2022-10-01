@@ -238,7 +238,7 @@ impl Resolve for Mentionable {
     }
 }
 
-macro_rules! impl_resolve_for_bounded {
+macro_rules! impl_resolve_for_bounded_integer {
     ($( $t:ty => $b:ident ),* $(,)?) => { $(
         impl<const MIN: $t, const MAX: $t> Resolve for ::bounded_integer::$b<MIN, MAX> {
             const KIND: CommandOptionType = CommandOptionType::Integer;
@@ -267,7 +267,7 @@ macro_rules! impl_resolve_for_bounded {
     )* };
 }
 
-impl_resolve_for_bounded! {
+impl_resolve_for_bounded_integer! {
     i8 => BoundedI8,
     i16 => BoundedI16,
     i32 => BoundedI32,
