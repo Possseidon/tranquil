@@ -263,7 +263,7 @@ impl_resolve_for_bounded_integer! {
 
 #[macro_export]
 macro_rules! bounded_number {
-    (@make($v:vis $name:ident: $min:expr, $max:expr)) => {
+    (@make($v:vis $name:ident: $min:expr, $max:expr $(,)?)) => {
         #[derive(
             ::std::clone::Clone,
             ::std::marker::Copy,
@@ -311,20 +311,35 @@ macro_rules! bounded_number {
             }
         }
     };
-    ($v:vis $name:ident: $min:literal..) => {
-        $crate::bounded_number!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::None));
+
+    // Avoid unused braces/parens warning.
+    (@inner(($value:expr))) => { $value };
+    (@inner({$value:expr})) => { $value };
+    (@inner($value:expr)) => { $value };
+
+    ($v:vis $name:ident: $min:tt..) => {
+        $crate::bounded_number!(@make($v $name:
+            ::std::option::Option::Some($crate::bounded_number!(@inner($min))),
+            ::std::option::Option::None,
+        ));
     };
-    ($v:vis $name:ident: ..=$max:literal) => {
-        $crate::bounded_number!(@make($v $name: ::std::option::Option::None, ::std::option::Option::Some($max)));
+    ($v:vis $name:ident: ..=$max:tt) => {
+        $crate::bounded_number!(@make($v $name:
+            ::std::option::Option::None,
+            ::std::option::Option::Some($crate::bounded_number!(@inner($max))),
+        ));
     };
-    ($v:vis $name:ident: $min:literal..=$max:literal) => {
-        $crate::bounded_number!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::Some($max)));
+    ($v:vis $name:ident: $min:tt..=$max:tt) => {
+        $crate::bounded_number!(@make($v $name:
+            ::std::option::Option::Some($crate::bounded_number!(@inner($min))),
+            ::std::option::Option::Some($crate::bounded_number!(@inner($max))),
+        ));
     };
 }
 
 #[macro_export]
 macro_rules! bounded_string {
-    (@make($v:vis $name:ident: $min:expr, $max:expr)) => {
+    (@make($v:vis $name:ident: $min:expr, $max:expr $(,)?)) => {
         #[derive(
             ::std::clone::Clone,
             ::std::fmt::Debug,
@@ -374,13 +389,28 @@ macro_rules! bounded_string {
             }
         }
     };
-    ($v:vis $name:ident: $min:literal..) => {
-        $crate::bounded_string!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::None));
+
+    // Avoid unused braces/parens warning.
+    (@inner(($value:expr))) => { $value };
+    (@inner({$value:expr})) => { $value };
+    (@inner($value:expr)) => { $value };
+
+    ($v:vis $name:ident: $min:tt..) => {
+        $crate::bounded_string!(@make($v $name:
+            ::std::option::Option::Some($crate::bounded_string!(@inner($min))),
+            ::std::option::Option::None,
+        ));
     };
-    ($v:vis $name:ident: ..=$max:literal) => {
-        $crate::bounded_string!(@make($v $name: ::std::option::Option::None, ::std::option::Option::Some($max)));
+    ($v:vis $name:ident: ..=$max:tt) => {
+        $crate::bounded_string!(@make($v $name:
+            ::std::option::Option::None,
+            ::std::option::Option::Some($crate::bounded_string!(@inner($max))),
+        ));
     };
-    ($v:vis $name:ident: $min:literal..=$max:literal) => {
-        $crate::bounded_string!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::Some($max)));
+    ($v:vis $name:ident: $min:tt..=$max:tt) => {
+        $crate::bounded_string!(@make($v $name:
+            ::std::option::Option::Some($crate::bounded_string!(@inner($min))),
+            ::std::option::Option::Some($crate::bounded_string!(@inner($max))),
+        ));
     };
 }
