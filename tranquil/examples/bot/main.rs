@@ -31,8 +31,11 @@ async fn main() -> AnyResult<()> {
         .run(env_var("DISCORD_TOKEN")?);
 
     tokio::select! {
-        result = bot => { result? },
-        result = tokio::signal::ctrl_c() => { result? },
+        result = bot => if let Err(error) = result {
+            eprintln!("{error}");
+            Err("runtime error")?
+        },
+        result = tokio::signal::ctrl_c() => result?,
     }
 
     Ok(())
