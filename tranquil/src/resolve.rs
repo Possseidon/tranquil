@@ -336,13 +336,13 @@ macro_rules! bounded_number {
         }
     };
     ($v:vis $name:ident: $min:literal..) => {
-        bounded_number!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::None));
+        $crate::bounded_number!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::None));
     };
     ($v:vis $name:ident: ..=$max:literal) => {
-        bounded_number!(@make($v $name: ::std::option::Option::None, ::std::option::Option::Some($max)));
+        $crate::bounded_number!(@make($v $name: ::std::option::Option::None, ::std::option::Option::Some($max)));
     };
     ($v:vis $name:ident: $min:literal..=$max:literal) => {
-        bounded_number!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::Some($max)));
+        $crate::bounded_number!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::Some($max)));
     };
 }
 
@@ -402,12 +402,12 @@ macro_rules! bounded_string {
         }
     };
     ($v:vis $name:ident: $min:literal..) => {
-        bounded_string!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::None));
+        $crate::bounded_string!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::None));
     };
     ($v:vis $name:ident: ..=$max:literal) => {
-        bounded_string!(@make($v $name: ::std::option::Option::None, ::std::option::Option::Some($max)));
+        $crate::bounded_string!(@make($v $name: ::std::option::Option::None, ::std::option::Option::Some($max)));
     };
     ($v:vis $name:ident: $min:literal..=$max:literal) => {
-        bounded_string!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::Some($max)));
+        $crate::bounded_string!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::Some($max)));
     };
 }
