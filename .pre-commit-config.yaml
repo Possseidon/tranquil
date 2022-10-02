@@ -12,8 +12,6 @@ repos:
       - id: end-of-file-fixer
       - id: fix-byte-order-marker
       - id: no-commit-to-branch
-      - id: pretty-format-json
-        args: [--autofix, --no-sort-keys]
       - id: trailing-whitespace
   - repo: https://github.com/doublify/pre-commit-rust
     rev: v1.0
@@ -21,10 +19,6 @@ repos:
       - id: fmt
       - id: clippy
         args: [--fix, --allow-staged]
-  - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.16.2
-    hooks:
-      - id: check-github-workflows
 
 ci:
   skip: [fmt, clippy]
