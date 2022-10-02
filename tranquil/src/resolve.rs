@@ -1,13 +1,16 @@
 use std::fmt;
 
-use serenity::model::{
-    application::{
-        command::CommandOptionType,
-        interaction::application_command::{CommandDataOption, CommandDataOptionValue},
+use serenity::{
+    builder::CreateApplicationCommandOption,
+    model::{
+        application::{
+            command::CommandOptionType,
+            interaction::application_command::{CommandDataOption, CommandDataOptionValue},
+        },
+        channel::{Attachment, PartialChannel},
+        guild::{PartialMember, Role},
+        user::User,
     },
-    channel::{Attachment, PartialChannel},
-    guild::{PartialMember, Role},
-    user::User,
 };
 
 use crate::AnyError;
@@ -67,29 +70,7 @@ pub trait Resolve: Sized {
     const KIND: CommandOptionType;
     const REQUIRED: bool = true;
 
-    fn min_int_value() -> Option<i64> {
-        None
-    }
-
-    fn max_int_value() -> Option<i64> {
-        None
-    }
-
-    fn min_number_value() -> Option<f64> {
-        None
-    }
-
-    fn max_number_value() -> Option<f64> {
-        None
-    }
-
-    fn min_length() -> Option<u16> {
-        None
-    }
-
-    fn max_length() -> Option<u16> {
-        None
-    }
+    fn describe(_option: &mut CreateApplicationCommandOption) {}
 
     fn resolve<'a>(
         name: &str,
@@ -100,6 +81,10 @@ pub trait Resolve: Sized {
 impl<T: Resolve> Resolve for Option<T> {
     const KIND: CommandOptionType = T::KIND;
     const REQUIRED: bool = false;
+
+    fn describe(option: &mut CreateApplicationCommandOption) {
+        T::describe(option);
+    }
 
     fn resolve<'a>(
         name: &str,
@@ -147,12 +132,9 @@ macro_rules! impl_resolve_for_integer {
         impl Resolve for $t {
             const KIND: CommandOptionType = CommandOptionType::Integer;
 
-            fn min_int_value() -> Option<i64> {
-                <$t>::MIN.try_into().ok()
-            }
-
-            fn max_int_value() -> Option<i64> {
-                <$t>::MAX.try_into().ok()
+            fn describe(option: &mut CreateApplicationCommandOption) {
+                i64::try_from(<$t>::MIN).ok().map(|min| option.min_int_value(min));
+                i64::try_from(<$t>::MAX).ok().map(|max| option.max_int_value(max));
             }
 
             fn resolve<'a>(
@@ -243,12 +225,9 @@ macro_rules! impl_resolve_for_bounded_integer {
         impl<const MIN: $t, const MAX: $t> Resolve for ::bounded_integer::$b<MIN, MAX> {
             const KIND: CommandOptionType = CommandOptionType::Integer;
 
-            fn min_int_value() -> Option<i64> {
-                MIN.try_into().ok()
-            }
-
-            fn max_int_value() -> Option<i64> {
-                MAX.try_into().ok()
+            fn describe(option: &mut CreateApplicationCommandOption) {
+                i64::try_from(MIN).ok().map(|min| option.min_int_value(min));
+                i64::try_from(MAX).ok().map(|max| option.max_int_value(max));
             }
 
             fn resolve<'a>(
@@ -299,12 +278,9 @@ macro_rules! bounded_number {
             const KIND: $crate::serenity::model::application::command::CommandOptionType =
                 <::std::primitive::f64 as $crate::resolve::Resolve>::KIND;
 
-            fn min_number_value() -> ::std::option::Option<::std::primitive::f64> {
-                $min
-            }
-
-            fn max_number_value() -> ::std::option::Option<::std::primitive::f64> {
-                $max
+            fn describe(option: &mut $crate::serenity::builder::CreateApplicationCommandOption) {
+                $min.map(|min| option.min_number_value(min));
+                $max.map(|max| option.max_number_value(max));
             }
 
             fn resolve<'a>(
@@ -325,8 +301,8 @@ macro_rules! bounded_number {
             type Error = $crate::resolve::ResolveError;
 
             fn try_from(value: ::std::primitive::f64) -> ::std::result::Result<Self, Self::Error> {
-                let min_ok = <Self as $crate::resolve::Resolve>::min_number_value().map_or(true, |min| value >= min);
-                let max_ok = <Self as $crate::resolve::Resolve>::max_number_value().map_or(true, |max| value <= max);
+                let min_ok = $min.map_or(true, |min| value >= min);
+                let max_ok = $max.map_or(true, |max| value <= max);
                 if min_ok && max_ok {
                     ::std::result::Result::Ok(Self(value))
                 } else {
@@ -365,12 +341,9 @@ macro_rules! bounded_string {
             const KIND: $crate::serenity::model::application::command::CommandOptionType =
                 <::std::string::String as $crate::resolve::Resolve>::KIND;
 
-            fn min_length() -> ::std::option::Option<::std::primitive::u16> {
-                $min
-            }
-
-            fn max_length() -> ::std::option::Option<::std::primitive::u16> {
-                $max
+            fn describe(option: &mut $crate::serenity::builder::CreateApplicationCommandOption) {
+                $min.map(|min| option.min_length(min));
+                $max.map(|max| option.max_length(max));
             }
 
             fn resolve<'a>(
@@ -391,8 +364,8 @@ macro_rules! bounded_string {
             type Error = $crate::resolve::ResolveError;
 
             fn try_from(value: ::std::string::String) -> ::std::result::Result<Self, Self::Error> {
-                let min_ok = <Self as $crate::resolve::Resolve>::min_length().map_or(true, |min| value.len() >= usize::from(min));
-                let max_ok = <Self as $crate::resolve::Resolve>::max_length().map_or(true, |max| value.len() <= usize::from(max));
+                let min_ok = $min.map_or(true, |min: u16| value.len() >= ::std::primitive::usize::from(min));
+                let max_ok = $max.map_or(true, |max: u16| value.len() <= ::std::primitive::usize::from(max));
                 if min_ok && max_ok {
                     ::std::result::Result::Ok(Self(value))
                 } else {

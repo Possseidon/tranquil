@@ -35,18 +35,12 @@ pub fn slash(_attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             (|| {
                 let mut option = ::serenity::builder::CreateApplicationCommandOption::default();
-                option
-                    .kind(<#ty as ::tranquil::resolve::Resolve>::KIND)
-                    .name(::std::stringify!(#pat))
-                    .required(<#ty as ::tranquil::resolve::Resolve>::REQUIRED);
-
-                <#ty as ::tranquil::resolve::Resolve>::min_int_value().map(|value| option.min_int_value(value));
-                <#ty as ::tranquil::resolve::Resolve>::max_int_value().map(|value| option.max_int_value(value));
-                <#ty as ::tranquil::resolve::Resolve>::min_number_value().map(|value| option.min_number_value(value));
-                <#ty as ::tranquil::resolve::Resolve>::max_number_value().map(|value| option.max_number_value(value));
-                <#ty as ::tranquil::resolve::Resolve>::min_length().map(|value| option.min_length(value));
-                <#ty as ::tranquil::resolve::Resolve>::max_length().map(|value| option.max_length(value));
-
+                <#ty as ::tranquil::resolve::Resolve>::describe(
+                    option
+                        .kind(<#ty as ::tranquil::resolve::Resolve>::KIND)
+                        .name(::std::stringify!(#pat))
+                        .required(<#ty as ::tranquil::resolve::Resolve>::REQUIRED)
+                );
                 option
             }) as fn() -> ::serenity::builder::CreateApplicationCommandOption
         }
