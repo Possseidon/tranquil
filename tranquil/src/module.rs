@@ -1,8 +1,8 @@
 use serenity::model::gateway::GatewayIntents;
 
-use crate::slash_command::SlashCommandProvider;
+use crate::{command::CommandProvider, l10n::CommandL10nProvider};
 
-pub trait Module: SlashCommandProvider + Send + Sync {
+pub trait Module: CommandProvider + CommandL10nProvider + Send + Sync {
     fn intents(&self) -> GatewayIntents {
         GatewayIntents::empty()
     }

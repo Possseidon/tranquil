@@ -101,7 +101,7 @@ fn multiple_renames(span: impl Spanned) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut errors = Vec::new();
+    let mut errors = vec![];
 
     let nested_metas = parse_macro_input!(attr as AttributeArgs);
 
@@ -154,7 +154,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
         attributes
     };
 
-    let slash_command_name = attributes
+    let command_name = attributes
         .rename
         .map_or(name.to_string(), |rename| match rename {
             Rename::ConvertCase(case) => name.to_string().to_case(case),
@@ -165,7 +165,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
         .sig
         .inputs
         .iter()
-        .skip(3) // TODO: Don't just skip self, ctx and interaction.
+        .skip(2) // TODO: Don't just skip self, CommandInteraction.
         .filter_map(|input| match input {
             FnArg::Receiver(_) => None,
             FnArg::Typed(pat_type) => Some(pat_type),
@@ -184,7 +184,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let command_options = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
         quote! {
-            (|| {
+            (|translated_commands: &::tranquil::l10n::TranslatedCommands| {
                 let mut option = ::serenity::builder::CreateApplicationCommandOption::default();
                 <#ty as ::tranquil::resolve::Resolve>::describe(
                     option
@@ -192,8 +192,9 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                         .name(::std::stringify!(#pat))
                         .required(<#ty as ::tranquil::resolve::Resolve>::REQUIRED)
                 );
+                translated_commands.describe_option(stringify!(#name), stringify!(#pat), &mut option);
                 option
-            }) as fn() -> ::serenity::builder::CreateApplicationCommandOption
+            }) as fn(&::tranquil::l10n::TranslatedCommands) -> ::serenity::builder::CreateApplicationCommandOption
         }
     });
 
@@ -202,17 +203,20 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         fn #name(
             self: ::std::sync::Arc<Self>
-        ) -> ::std::boxed::Box<dyn ::tranquil::slash_command::SlashCommandImpl> {
-            ::std::boxed::Box::new(::tranquil::slash_command::SlashCommand::new(
-                #slash_command_name,
+        ) -> ::std::boxed::Box<dyn ::tranquil::command::CommandImpl> {
+            ::std::boxed::Box::new(::tranquil::command::Command::new(
+                #command_name,
                 ::std::boxed::Box::new(|ctx, interaction, module: ::std::sync::Arc<Self>| {
                     ::std::boxed::Box::pin(async move {
                         let options = interaction.data.options.iter();
                         #(#parameter_resolvers)*
-                        module.#impl_name(ctx, interaction, #(#parameters),*).await
+                        module.#impl_name(
+                            ::tranquil::command::CommandContext{ ctx, interaction },
+                            #(#parameters),*,
+                        ).await
                     })
                 }),
-                vec![#(#command_options),*],
+                ::std::vec![#(#command_options),*],
                 self,
             ))
         }
@@ -222,11 +226,11 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn slash_command_provider(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn command_provider(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let impl_item = parse_macro_input!(item as ItemImpl);
     let type_name = &impl_item.self_ty;
 
-    let slash_commands = impl_item.items.iter().filter_map(|item| match item {
+    let commands = impl_item.items.iter().filter_map(|item| match item {
         ImplItem::Method(impl_item_method) => Some(&impl_item_method.sig.ident),
         _ => None,
     });
@@ -234,11 +238,11 @@ pub fn slash_command_provider(_attr: TokenStream, item: TokenStream) -> TokenStr
     TokenStream::from(quote! {
         #impl_item
 
-        impl ::module_framework::slash_command::SlashCommandProvider for #type_name {
-            fn slash_commands(
+        impl ::tranquil::command::CommandProvider for #type_name {
+            fn commands(
                 self: ::std::sync::Arc<Self>,
-            ) -> ::module_framework::slash_command::SlashCommands {
-                ::std::vec![#(Self::#slash_commands(self.clone())),*]
+            ) -> ::tranquil::command::Commands {
+                ::std::vec![#(Self::#commands(self.clone())),*]
             }
         }
     })

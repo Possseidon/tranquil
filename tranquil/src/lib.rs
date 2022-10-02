@@ -1,7 +1,8 @@
 pub mod bot;
+pub mod command;
+pub mod l10n;
 pub mod module;
 pub mod resolve;
-pub mod slash_command;
 
 pub use tranquil_macros::*;
 extern crate self as tranquil;
