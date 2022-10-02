@@ -1,16 +1,9 @@
-use std::sync::Arc;
+use serenity::model::gateway::GatewayIntents;
 
-use serenity::{async_trait, model::gateway::GatewayIntents};
+use crate::slash_command::SlashCommandProvider;
 
-use crate::slash_command::SlashCommands;
-
-#[async_trait]
-pub trait Module: Send + Sync {
+pub trait Module: SlashCommandProvider + Send + Sync {
     fn intents(&self) -> GatewayIntents {
         GatewayIntents::empty()
-    }
-
-    fn slash_commands(self: Arc<Self>) -> SlashCommands {
-        SlashCommands::default()
     }
 }

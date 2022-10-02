@@ -3,8 +3,8 @@ use indoc::indoc;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    parse_macro_input, spanned::Spanned, AttributeArgs, FnArg, ItemFn, Lit, MetaNameValue,
-    NestedMeta, PatType,
+    parse_macro_input, spanned::Spanned, AttributeArgs, FnArg, ImplItem, ItemFn, ItemImpl, Lit,
+    Meta, MetaNameValue, NestedMeta, PatType,
 };
 
 enum Rename {
@@ -103,18 +103,18 @@ fn multiple_renames(span: impl Spanned) -> TokenStream {
 pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut errors = Vec::new();
 
-    let attr = parse_macro_input!(attr as AttributeArgs);
+    let nested_metas = parse_macro_input!(attr as AttributeArgs);
 
-    let mut item = parse_macro_input!(item as ItemFn);
-    let name = item.sig.ident;
+    let mut item_fn = parse_macro_input!(item as ItemFn);
+    let name = item_fn.sig.ident;
     let impl_name = format_ident!("__{name}");
-    item.sig.ident = impl_name.clone();
+    item_fn.sig.ident = impl_name.clone();
 
     let attributes = {
         let mut attributes = Attributes::default();
-        for nested_meta in attr.iter() {
+        for nested_meta in nested_metas.iter() {
             match nested_meta {
-                NestedMeta::Meta(syn::Meta::NameValue(MetaNameValue { path, lit, .. })) => {
+                NestedMeta::Meta(Meta::NameValue(MetaNameValue { path, lit, .. })) => {
                     let ident = path.get_ident();
                     if ident.map_or(false, |ident| ident == "case") {
                         match lit {
@@ -161,7 +161,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
             Rename::To(name) => name,
         });
 
-    let typed_parameters = item
+    let typed_parameters = item_fn
         .sig
         .inputs
         .iter()
@@ -197,8 +197,8 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     });
 
-    let expanded = quote! {
-        #item
+    let mut result = TokenStream::from(quote! {
+        #item_fn
 
         fn #name(
             self: ::std::sync::Arc<Self>
@@ -216,9 +216,30 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                 self,
             ))
         }
-    };
-
-    let mut result = TokenStream::from(expanded);
+    });
     result.extend(errors);
     result
+}
+
+#[proc_macro_attribute]
+pub fn slash_command_provider(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let impl_item = parse_macro_input!(item as ItemImpl);
+    let type_name = &impl_item.self_ty;
+
+    let slash_commands = impl_item.items.iter().filter_map(|item| match item {
+        ImplItem::Method(impl_item_method) => Some(&impl_item_method.sig.ident),
+        _ => None,
+    });
+
+    TokenStream::from(quote! {
+        #impl_item
+
+        impl ::module_framework::slash_command::SlashCommandProvider for #type_name {
+            fn slash_commands(
+                self: ::std::sync::Arc<Self>,
+            ) -> ::module_framework::slash_command::SlashCommands {
+                ::std::vec![#(Self::#slash_commands(self.clone())),*]
+            }
+        }
+    })
 }

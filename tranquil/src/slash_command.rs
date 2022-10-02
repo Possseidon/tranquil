@@ -100,3 +100,7 @@ impl<M: Module> SlashCommandImpl for SlashCommand<M> {
 }
 
 pub type SlashCommands = Vec<Box<dyn SlashCommandImpl>>;
+
+pub trait SlashCommandProvider {
+    fn slash_commands(self: Arc<Self>) -> SlashCommands;
+}

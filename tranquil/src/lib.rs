@@ -4,6 +4,7 @@ pub mod resolve;
 pub mod slash_command;
 
 pub use tranquil_macros::*;
+extern crate self as tranquil;
 
 pub use serenity;
 
