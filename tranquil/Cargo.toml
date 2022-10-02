@@ -11,7 +11,7 @@ keywords = ["bot", "commands", "discord", "framework", "serenity"]
 categories = ["api-bindings"]
 
 [dependencies]
-tranquil-macros = { path = "../tranquil-macros" }
+tranquil-macros = { version = "0.1.0", path = "../tranquil-macros" }
 bounded-integer = { version = "0.5.3", features = ["std", "macro", "types"] }
 futures = "0.3.23"
 serde = "1.0"
