@@ -4,6 +4,8 @@ use tranquil::{
     AnyResult,
 };
 
+// TODO: Move env var processing into utility library.
+
 fn env_var(token: &str) -> Result<String, std::env::VarError> {
     std::env::var(token).map_err(|err| {
         eprintln!("{err}: {token}");
@@ -30,6 +32,7 @@ async fn main() -> AnyResult<()> {
         // TODO: .register(MyModule)
         .run(env_var("DISCORD_TOKEN")?);
 
+    // TODO: Create helper for Ctrl-C handling.
     tokio::select! {
         result = bot => if let Err(error) = result {
             eprintln!("{error}");
