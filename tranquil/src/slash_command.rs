@@ -3,12 +3,9 @@ use std::{pin::Pin, sync::Arc};
 use futures::Future;
 use serenity::{
     async_trait,
-    builder::CreateApplicationCommand,
+    builder::{CreateApplicationCommand, CreateApplicationCommandOption},
     client::Context,
-    model::{
-        application::command::CommandOptionType,
-        application::interaction::application_command::ApplicationCommandInteraction,
-    },
+    model::application::interaction::application_command::ApplicationCommandInteraction,
 };
 
 use crate::{module::Module, AnyResult};
@@ -23,31 +20,10 @@ type SlashCommandFunction<M> = Box<
         + Sync,
 >;
 
-pub struct ParameterInfo {
-    pub name: String,
-    pub kind: CommandOptionType,
-    pub required: bool,
-}
-
-fn create_application_command<'a>(
-    parameter_info: impl IntoIterator<Item = &'a ParameterInfo>,
-    command: &mut CreateApplicationCommand,
-) {
-    for info in parameter_info {
-        command.create_option(|option| {
-            option
-                .name(&info.name)
-                .description("TODO")
-                .kind(info.kind)
-                .required(info.required)
-        });
-    }
-}
-
 pub struct SlashCommand<M: Module> {
     name: String,
     function: SlashCommandFunction<M>,
-    parameter_info: Vec<ParameterInfo>,
+    option_builders: Vec<fn() -> CreateApplicationCommandOption>,
     module: Arc<M>,
 }
 
@@ -55,13 +31,13 @@ impl<M: Module> SlashCommand<M> {
     pub fn new(
         name: impl Into<String>,
         function: SlashCommandFunction<M>,
-        parameter_info: impl Into<Vec<ParameterInfo>>,
+        option_builders: impl Into<Vec<fn() -> CreateApplicationCommandOption>>,
         module: Arc<M>,
     ) -> Self {
         Self {
             name: name.into(),
             function,
-            parameter_info: parameter_info.into(),
+            option_builders: option_builders.into(),
             module,
         }
     }
@@ -81,8 +57,11 @@ impl<M: Module> SlashCommandImpl for SlashCommand<M> {
     }
 
     fn create_application_command(&self, command: &mut CreateApplicationCommand) {
-        // TODO: Only call parameter_info once
-        create_application_command(&self.parameter_info, command);
+        for option_builder in &self.option_builders {
+            let mut option = option_builder();
+            option.description("TODO");
+            command.add_option(option);
+        }
     }
 
     async fn run(&self, ctx: Context, interaction: ApplicationCommandInteraction) -> AnyResult<()> {
@@ -90,7 +69,7 @@ impl<M: Module> SlashCommandImpl for SlashCommand<M> {
         // TODO: return a different type of error so e.g. invalid parameters can automatically be reported nicely like here:
 
         /*
-        match parameter_from_interaction(&self.parameter_info, &interaction) {
+        match parameter_from_interaction(&self.command_options, &interaction) {
             Ok(parameter) => (self.function)(ctx, interaction, parameter).await,
             Err(invalid_parameters) => {
                 interaction

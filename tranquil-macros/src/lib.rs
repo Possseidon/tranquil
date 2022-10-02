@@ -24,24 +24,32 @@ pub fn slash(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let parameter_resolvers = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
         quote! {
-            let #pat = <#ty as ::tranquil::resolve::Resolve>::resolve(::std::stringify!(#pat), options.clone())?;
+            let #pat = <#ty as ::tranquil::resolve::Resolve>::resolve(
+                ::std::stringify!(#pat),
+                options.clone(),
+            )?;
         }
     });
 
-    let parameter_descriptions = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
+    let command_options = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
         quote! {
-            ::tranquil::slash_command::ParameterInfo {
-                name: ::std::stringify!(#pat).into(),
-                kind: <#ty as ::tranquil::resolve::Resolve>::KIND,
-                required: <#ty as ::tranquil::resolve::Resolve>::REQUIRED,
-            }
+            (|| {
+                let mut option = ::serenity::builder::CreateApplicationCommandOption::default();
+                option
+                    .name(::std::stringify!(#pat))
+                    .kind(<#ty as ::tranquil::resolve::Resolve>::KIND)
+                    .required(<#ty as ::tranquil::resolve::Resolve>::REQUIRED);
+                option
+            }) as fn() -> ::serenity::builder::CreateApplicationCommandOption
         }
     });
 
     let expanded = quote! {
         #input
 
-        fn #name(self: ::std::sync::Arc<Self>) -> ::std::boxed::Box<dyn ::tranquil::slash_command::SlashCommandImpl> {
+        fn #name(
+            self: ::std::sync::Arc<Self>
+        ) -> ::std::boxed::Box<dyn ::tranquil::slash_command::SlashCommandImpl> {
             ::std::boxed::Box::new(::tranquil::slash_command::SlashCommand::new(
                 stringify!(#name),
                 ::std::boxed::Box::new(|ctx, interaction, module: ::std::sync::Arc<Self>| {
@@ -51,9 +59,7 @@ pub fn slash(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         module.#impl_name(ctx, interaction, #(#parameters),*).await
                     })
                 }),
-                ::std::vec![
-                    #(#parameter_descriptions),*
-                ],
+                vec![#(#command_options),*],
                 self,
             ))
         }
