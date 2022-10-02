@@ -1,2 +1,2 @@
 [workspace]
-members = ["tranquil"]
+members = ["tranquil", "tranquil-macros"]

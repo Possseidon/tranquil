@@ -1,5 +1,8 @@
 use serenity::model::id::GuildId;
-use tranquil::{ApplicationCommandUpdate, Bot};
+use tranquil::{
+    bot::{ApplicationCommandUpdate, Bot},
+    AnyResult,
+};
 
 fn env_var(token: &str) -> Result<String, std::env::VarError> {
     std::env::var(token).map_err(|err| {
@@ -9,7 +12,7 @@ fn env_var(token: &str) -> Result<String, std::env::VarError> {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> AnyResult<()> {
     dotenv::dotenv().ok();
 
     let bot = Bot::new()
