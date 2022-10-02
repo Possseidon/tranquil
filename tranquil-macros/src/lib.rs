@@ -212,7 +212,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                         #(#parameter_resolvers)*
                         module.#impl_name(
                             ::tranquil::command::CommandContext{ ctx, interaction },
-                            #(#parameters),*,
+                            #(#parameters),*
                         ).await
                     })
                 }),
