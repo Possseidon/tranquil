@@ -1,7 +1,14 @@
 [package]
 name = "tranquil"
 version = "0.1.0"
+authors = ["Possseidon <xpossseidon@gmail.com>"]
 edition = "2021"
+description = "A module framework for Discord bots with slash commands, based on serenity."
+readme = "../README.md"
+repository = "https://github.com/Possseidon/tranquil"
+license = "MIT"
+keywords = ["bot", "commands", "discord", "framework", "serenity"]
+categories = ["api-bindings"]
 
 [dependencies]
 tranquil-macros = { path = "../tranquil-macros" }

@@ -1,7 +1,14 @@
 [package]
 name = "tranquil-macros"
 version = "0.1.0"
+authors = ["Possseidon <xpossseidon@gmail.com>"]
 edition = "2021"
+description = "Macro crate for tranquil."
+readme = "../README.md"
+repository = "https://github.com/Possseidon/tranquil"
+license = "MIT"
+keywords = ["commands", "macro", "tranquil"]
+categories = []
 
 [lib]
 proc-macro = true
