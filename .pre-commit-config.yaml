@@ -25,3 +25,6 @@ repos:
     rev: 0.16.2
     hooks:
       - id: check-github-workflows
+
+ci:
+  skip: [fmt, clippy]
