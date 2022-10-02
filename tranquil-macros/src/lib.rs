@@ -44,6 +44,8 @@ pub fn slash(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 <#ty as ::tranquil::resolve::Resolve>::max_int_value().map(|value| option.max_int_value(value));
                 <#ty as ::tranquil::resolve::Resolve>::min_number_value().map(|value| option.min_number_value(value));
                 <#ty as ::tranquil::resolve::Resolve>::max_number_value().map(|value| option.max_number_value(value));
+                <#ty as ::tranquil::resolve::Resolve>::min_length().map(|value| option.min_length(value));
+                <#ty as ::tranquil::resolve::Resolve>::max_length().map(|value| option.max_length(value));
 
                 option
             }) as fn() -> ::serenity::builder::CreateApplicationCommandOption

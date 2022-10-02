@@ -19,6 +19,7 @@ pub enum ResolveError {
     InvalidType,
     IntegerRangeError,
     NumberRangeError,
+    StringLengthError,
     NoPartialMemberData,
     Other(AnyError),
 }
@@ -35,6 +36,7 @@ impl fmt::Display for ResolveError {
             ResolveError::InvalidType => write!(f, "parameter has invalid type"),
             ResolveError::IntegerRangeError => write!(f, "integer out of range"),
             ResolveError::NumberRangeError => write!(f, "number out of range"),
+            ResolveError::StringLengthError => write!(f, "invalid string length"),
             ResolveError::NoPartialMemberData => write!(f, "no partial member data available"),
             ResolveError::Other(error) => error.fmt(f),
         }
@@ -78,6 +80,14 @@ pub trait Resolve: Sized {
     }
 
     fn max_number_value() -> Option<f64> {
+        None
+    }
+
+    fn min_length() -> Option<u16> {
+        None
+    }
+
+    fn max_length() -> Option<u16> {
         None
     }
 
@@ -279,9 +289,9 @@ macro_rules! bounded_number {
             ::std::clone::Clone,
             ::std::marker::Copy,
             ::std::fmt::Debug,
-            // No default derive or manual implementation, as 0.0 can lie outside the valid range.
+            // No default derive or manual implementation, as 0.0 might lie outside the valid range.
             ::std::cmp::PartialEq,
-            ::std::cmp::PartialOrd
+            ::std::cmp::PartialOrd,
         )]
         $v struct $name(::std::primitive::f64);
 
@@ -305,7 +315,7 @@ macro_rules! bounded_number {
             }
         }
 
-        impl ::std::convert::From<$name> for f64 {
+        impl ::std::convert::From<$name> for ::std::primitive::f64 {
             fn from(value: $name) -> Self {
                 value.0
             }
@@ -333,5 +343,71 @@ macro_rules! bounded_number {
     };
     ($v:vis $name:ident: $min:literal..=$max:literal) => {
         bounded_number!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::Some($max)));
+    };
+}
+
+#[macro_export]
+macro_rules! bounded_string {
+    (@make($v:vis $name:ident: $min:expr, $max:expr)) => {
+        #[derive(
+            ::std::clone::Clone,
+            ::std::fmt::Debug,
+            // No default derive or manual implementation, as the empty string might be invalid.
+            ::std::cmp::Eq,
+            ::std::hash::Hash,
+            ::std::cmp::Ord,
+            ::std::cmp::PartialEq,
+            ::std::cmp::PartialOrd,
+        )]
+        $v struct $name(::std::string::String);
+
+        impl $crate::resolve::Resolve for $name {
+            const KIND: $crate::serenity::model::application::command::CommandOptionType =
+                <::std::string::String as $crate::resolve::Resolve>::KIND;
+
+            fn min_length() -> ::std::option::Option<::std::primitive::u16> {
+                $min
+            }
+
+            fn max_length() -> ::std::option::Option<::std::primitive::u16> {
+                $max
+            }
+
+            fn resolve<'a>(
+                name: &::std::primitive::str,
+                options: impl Iterator<Item = &'a $crate::serenity::model::application::interaction::application_command::CommandDataOption>,
+            ) -> $crate::resolve::ResolveResult<Self> {
+                <::std::string::String as $crate::resolve::Resolve>::resolve(name, options).and_then(Self::try_from)
+            }
+        }
+
+        impl ::std::convert::From<$name> for ::std::string::String {
+            fn from(value: $name) -> Self {
+                value.0
+            }
+        }
+
+        impl ::std::convert::TryFrom<::std::string::String> for $name {
+            type Error = $crate::resolve::ResolveError;
+
+            fn try_from(value: ::std::string::String) -> ::std::result::Result<Self, Self::Error> {
+                let min_ok = <Self as $crate::resolve::Resolve>::min_length().map_or(true, |min| value.len() >= usize::from(min));
+                let max_ok = <Self as $crate::resolve::Resolve>::max_length().map_or(true, |max| value.len() <= usize::from(max));
+                if min_ok && max_ok {
+                    ::std::result::Result::Ok(Self(value))
+                } else {
+                    ::std::result::Result::Err($crate::resolve::ResolveError::StringLengthError)?
+                }
+            }
+        }
+    };
+    ($v:vis $name:ident: $min:literal..) => {
+        bounded_string!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::None));
+    };
+    ($v:vis $name:ident: ..=$max:literal) => {
+        bounded_string!(@make($v $name: ::std::option::Option::None, ::std::option::Option::Some($max)));
+    };
+    ($v:vis $name:ident: $min:literal..=$max:literal) => {
+        bounded_string!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::Some($max)));
     };
 }
