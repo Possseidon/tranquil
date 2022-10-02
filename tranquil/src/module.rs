@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use serenity::{async_trait, model::prelude::*};
+use serenity::{async_trait, model::gateway::GatewayIntents};
 
 use crate::slash_command::SlashCommands;
 

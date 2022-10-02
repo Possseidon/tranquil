@@ -22,9 +22,9 @@ pub fn slash(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let parameters = typed_parameters.clone().map(|PatType { pat, .. }| pat);
 
-    let parameter_resolvers = typed_parameters.clone().map(|PatType { pat, .. }| {
+    let parameter_resolvers = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
         quote! {
-            let #pat = ::tranquil::resolve::resolve_parameter(options, stringify!(#pat))?;
+            let #pat = <#ty as ::tranquil::resolve::Resolve>::resolve(::std::stringify!(#pat), options.clone())?;
         }
     });
 
@@ -33,6 +33,7 @@ pub fn slash(_attr: TokenStream, item: TokenStream) -> TokenStream {
             ::tranquil::slash_command::ParameterInfo {
                 name: ::std::stringify!(#pat).into(),
                 kind: <#ty as ::tranquil::resolve::Resolve>::KIND,
+                required: <#ty as ::tranquil::resolve::Resolve>::REQUIRED,
             }
         }
     });
@@ -45,7 +46,7 @@ pub fn slash(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 stringify!(#name),
                 ::std::boxed::Box::new(|ctx, interaction, module: ::std::sync::Arc<Self>| {
                     ::std::boxed::Box::pin(async move {
-                        let options = &interaction.data.options;
+                        let options = interaction.data.options.iter();
                         #(#parameter_resolvers)*
                         module.#impl_name(ctx, interaction, #(#parameters),*).await
                     })

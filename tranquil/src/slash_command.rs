@@ -4,11 +4,11 @@ use futures::Future;
 use serenity::{
     async_trait,
     builder::CreateApplicationCommand,
+    client::Context,
     model::{
         application::command::CommandOptionType,
         application::interaction::application_command::ApplicationCommandInteraction,
     },
-    prelude::*,
 };
 
 use crate::{module::Module, AnyResult};
@@ -26,6 +26,7 @@ type SlashCommandFunction<M> = Box<
 pub struct ParameterInfo {
     pub name: String,
     pub kind: CommandOptionType,
+    pub required: bool,
 }
 
 fn create_application_command<'a>(
@@ -33,42 +34,15 @@ fn create_application_command<'a>(
     command: &mut CreateApplicationCommand,
 ) {
     for info in parameter_info {
-        command.create_option(|option| option.name(&info.name).description("TODO").kind(info.kind));
+        command.create_option(|option| {
+            option
+                .name(&info.name)
+                .description("TODO")
+                .kind(info.kind)
+                .required(info.required)
+        });
     }
 }
-
-/*
-fn parameter_from_interaction<'a>(
-    parameter_info: impl IntoIterator<Item = &'a ParameterInfo>,
-    interaction: &ApplicationCommandInteraction,
-) -> Result<T, Vec<InvalidParameter>> {
-    let mut parameter = T::default();
-    let invalid_parameters = parameter_info
-        .into_iter()
-        .filter_map(|info| {
-            interaction
-                .data
-                .options
-                .iter()
-                .find(|option| option.name == info.name)
-                .and_then(|option| {
-                    (info.fill_parameter)(option, &mut parameter)
-                        .err()
-                        .map(|error| InvalidParameter {
-                            name: info.name.clone(),
-                            error,
-                        })
-                })
-        })
-        .collect::<Vec<_>>();
-
-    if invalid_parameters.is_empty() {
-        Ok(parameter)
-    } else {
-        Err(invalid_parameters)
-    }
-}
-*/
 
 pub struct SlashCommand<M: Module> {
     name: String,
@@ -113,6 +87,8 @@ impl<M: Module> SlashCommandImpl for SlashCommand<M> {
 
     async fn run(&self, ctx: Context, interaction: ApplicationCommandInteraction) -> AnyResult<()> {
         (self.function)(ctx, interaction, self.module.clone()).await
+        // TODO: return a different type of error so e.g. invalid parameters can automatically be reported nicely like here:
+
         /*
         match parameter_from_interaction(&self.parameter_info, &interaction) {
             Ok(parameter) => (self.function)(ctx, interaction, parameter).await,

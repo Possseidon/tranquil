@@ -1,19 +1,25 @@
-use std::sync::{
-    atomic::{self, AtomicBool},
-    Arc,
+use std::{
+    ops::Deref,
+    sync::{
+        atomic::{self, AtomicBool},
+        Arc,
+    },
 };
 
 use futures::{future::join_all, join};
 use serenity::{
     async_trait,
     builder::CreateApplicationCommand,
+    client::{Context, EventHandler, RawEventHandler},
     framework::StandardFramework,
     http::Http,
     model::{
         application::{command::Command, interaction::Interaction},
-        prelude::*,
+        event::Event,
+        gateway::{GatewayIntents, Ready},
+        guild::Guild,
+        id::GuildId,
     },
-    prelude::*,
     utils::colours as colors,
 };
 
@@ -34,14 +40,20 @@ pub struct Bot {
     modules: Vec<Arc<dyn Module>>,
 }
 
-impl Bot {
-    pub fn new() -> Self {
+impl Default for Bot {
+    fn default() -> Self {
         Self {
             already_connected: Default::default(),
             application_command_update: Some(ApplicationCommandUpdate::default()),
             slash_commands: Default::default(),
             modules: Default::default(),
         }
+    }
+}
+
+impl Bot {
+    pub fn new() -> Self {
+        Default::default()
     }
 
     pub fn application_command_update(
@@ -68,7 +80,7 @@ impl Bot {
         // });
 
         let framework = StandardFramework::new();
-        let intents = merge_intents(&self.modules);
+        let intents = merge_intents(self.modules.iter().map(Deref::deref));
 
         // TODO: Use modules to initialize framework and intents.
 
@@ -115,11 +127,12 @@ impl EventHandler for Bot {
 
         // TODO: Update commands depending on modules.
         async fn update_guilds(
-            x: Vec<CreateApplicationCommand>,
+            create_application_commands: impl Into<Vec<CreateApplicationCommand>>,
             http: &Http,
-            guilds: &Vec<GuildId>,
+            guilds: impl Iterator<Item = GuildId> + Clone,
         ) -> Vec<(String, Option<serenity::Error>)> {
-            let guild_names = join_all(guilds.iter().map(|guild| async move {
+            let create_application_commands = create_application_commands.into();
+            let guild_names = join_all(guilds.clone().map(|guild| async move {
                 format!(
                     "for {}",
                     &Guild::get(http, guild)
@@ -128,13 +141,16 @@ impl EventHandler for Bot {
                         .unwrap_or_else(|_| format!("<{}>", guild.0))
                 )
             }));
-            let guild_updates = join_all(guilds.iter().map(|guild| async {
-                guild
-                    .set_application_commands(http, |commands| {
-                        commands.set_application_commands(x.clone())
-                    })
-                    .await
-                    .err()
+            let guild_updates = join_all(guilds.clone().map(|guild| {
+                let create_application_commands = create_application_commands.clone();
+                async move {
+                    guild
+                        .set_application_commands(http, |commands| {
+                            commands.set_application_commands(create_application_commands)
+                        })
+                        .await
+                        .err()
+                }
             }));
             let (guild_names, guild_updates) = join!(guild_names, guild_updates);
             guild_names
@@ -162,7 +178,7 @@ impl EventHandler for Bot {
                 update_guilds(
                     application_commands,
                     &ctx.http,
-                    &data_about_bot.guilds.iter().map(|guild| guild.id).collect(),
+                    data_about_bot.guilds.iter().map(|guild| guild.id),
                 )
                 .await
             }
@@ -170,7 +186,7 @@ impl EventHandler for Bot {
                 let guild_count = guilds.len();
                 let s = if guild_count == 1 { "" } else { "s" };
                 println!("Updating application commands only for the {guild_count} specified guild{s}...");
-                update_guilds(application_commands, &ctx.http, guilds).await
+                update_guilds(application_commands, &ctx.http, guilds.iter().copied()).await
             }
             None => {
                 println!("Skipping updating of application commands.");
@@ -187,7 +203,7 @@ impl EventHandler for Bot {
     }
 
     async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
-        let handle = async {
+        async {
             match interaction {
                 Interaction::ApplicationCommand(interaction) => {
                     let command_name = &interaction.data.name;
@@ -224,8 +240,9 @@ impl EventHandler for Bot {
                 _ => {}
             };
             Ok::<(), AnyError>(())
-        };
-        handle.await.unwrap_or_else(|error| {
+        }
+        .await
+        .unwrap_or_else(|error| {
             eprintln!("Error creating interaction response:\n{error:#?}");
         });
     }
@@ -238,8 +255,8 @@ impl RawEventHandler for Bot {
     }
 }
 
-fn merge_intents(modules: &Vec<Arc<dyn Module>>) -> GatewayIntents {
-    modules.iter().fold(GatewayIntents::empty(), |acc, module| {
+fn merge_intents<'a>(modules: impl Iterator<Item = &'a dyn Module>) -> GatewayIntents {
+    modules.fold(GatewayIntents::empty(), |acc, module| {
         acc | module.intents()
     })
 }

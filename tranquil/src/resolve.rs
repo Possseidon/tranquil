@@ -5,73 +5,98 @@ use serenity::model::{
         command::CommandOptionType,
         interaction::application_command::{CommandDataOption, CommandDataOptionValue},
     },
-    prelude::*,
+    channel::{Attachment, PartialChannel},
+    guild::{PartialMember, Role},
+    user::User,
 };
 
-use crate::AnyResult;
+use crate::AnyError;
 
 #[derive(Debug)]
 pub enum ResolveError {
-    InvalidType,
+    Missing,
     Unresolvable,
+    InvalidType,
+    Other(AnyError),
 }
+
+type ResolveResult<T> = Result<T, ResolveError>;
 
 impl std::error::Error for ResolveError {}
 
 impl fmt::Display for ResolveError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                ResolveError::InvalidType => "parameter has invalid type",
-                ResolveError::Unresolvable => "paremeter is unresolvable",
-            }
-        )
-    }
-}
-
-pub trait Resolve: Sized {
-    const KIND: CommandOptionType;
-
-    fn resolve(option: &CommandDataOption) -> AnyResult<Self>;
-}
-
-impl<T: ResolveValue> Resolve for T {
-    const KIND: CommandOptionType = T::KIND;
-
-    fn resolve(option: &CommandDataOption) -> AnyResult<Self> {
-        match option.resolved.as_ref() {
-            Some(value) => Self::resolve_value(value),
-            None => Err(ResolveError::Unresolvable)?,
+        match self {
+            ResolveError::Missing => write!(f, "parameter not specified"),
+            ResolveError::Unresolvable => write!(f, "paremeter is unresolvable"),
+            ResolveError::InvalidType => write!(f, "parameter has invalid type"),
+            ResolveError::Other(error) => error.fmt(f),
         }
     }
 }
 
-pub trait ResolveValue: Sized {
-    const KIND: CommandOptionType;
-
-    fn resolve_value(value: &CommandDataOptionValue) -> AnyResult<Self>;
+fn find_option<'a, T>(
+    name: &str,
+    mut options: impl Iterator<Item = &'a CommandDataOption>,
+    resolver: impl FnOnce(&'a CommandDataOption) -> ResolveResult<T>,
+) -> ResolveResult<T> {
+    options
+        .find(|option| option.name == name)
+        .map(resolver)
+        .unwrap_or(Err(ResolveError::Missing))
 }
 
-impl<T: ResolveValue> ResolveValue for Option<T> {
-    const KIND: CommandOptionType = T::KIND;
+fn resolve_option(option: &CommandDataOption) -> ResolveResult<&CommandDataOptionValue> {
+    option.resolved.as_ref().ok_or(ResolveError::Unresolvable)
+}
 
-    fn resolve_value(value: &CommandDataOptionValue) -> AnyResult<Self> {
-        Ok(Some(T::resolve_value(value)?))
+fn find_and_resolve_option<'a, T>(
+    name: &str,
+    options: impl Iterator<Item = &'a CommandDataOption>,
+) -> ResolveResult<&'a CommandDataOptionValue> {
+    find_option(name, options, resolve_option)
+}
+
+pub trait Resolve: Sized {
+    const KIND: CommandOptionType;
+    const REQUIRED: bool = true;
+
+    fn resolve<'a>(
+        name: &str,
+        options: impl Iterator<Item = &'a CommandDataOption>,
+    ) -> ResolveResult<Self>;
+}
+
+impl<T: Resolve> Resolve for Option<T> {
+    const KIND: CommandOptionType = T::KIND;
+    const REQUIRED: bool = false;
+
+    fn resolve<'a>(
+        name: &str,
+        options: impl Iterator<Item = &'a CommandDataOption>,
+    ) -> ResolveResult<Self> {
+        T::resolve(name, options)
+            .map(|value| Some(value))
+            .or_else(|error| match error {
+                ResolveError::Missing => Ok(None),
+                error => Err(error),
+            })
     }
 }
 
 macro_rules! impl_resolve {
     ($command_option_type:ident => $t:ty) => {
-        impl ResolveValue for $t {
+        impl Resolve for $t {
             const KIND: CommandOptionType = CommandOptionType::$command_option_type;
 
-            fn resolve_value(value: &CommandDataOptionValue) -> AnyResult<Self> {
-                match value {
+            fn resolve<'a>(
+                name: &str,
+                options: impl Iterator<Item = &'a CommandDataOption>,
+            ) -> ResolveResult<Self> {
+                find_and_resolve_option::<Self>(name, options).and_then(|value| match value {
                     CommandDataOptionValue::$command_option_type(value) => Ok(value.clone()),
-                    _ => Err(ResolveError::InvalidType)?,
-                }
+                    _ => Err(ResolveError::InvalidType),
+                })
             }
         }
     };
@@ -87,16 +112,19 @@ impl_resolve!(Attachment => Attachment);
 
 macro_rules! impl_resolve_for_integer {
     ($( $t:ty ),*) => {
-        $( impl ResolveValue for $t {
+        $( impl Resolve for $t {
             const KIND: CommandOptionType = CommandOptionType::Integer;
 
-            fn resolve_value(value: &CommandDataOptionValue) -> AnyResult<Self> {
-                match value {
+            fn resolve<'a>(
+                name: &str,
+                options: impl Iterator<Item = &'a CommandDataOption>,
+            ) -> ResolveResult<Self> {
+                find_and_resolve_option::<i64>(name, options).and_then(|value| match *value {
                     CommandDataOptionValue::Integer(value) => {
-                        Ok(<$t>::try_from(*value)?)
+                        <$t>::try_from(value).map_err(|error| ResolveError::Other(error.into()))
                     }
-                    _ => Err(ResolveError::InvalidType)?,
-                }
+                    _ => Err(ResolveError::InvalidType),
+                })
             }
         } )*
     };
@@ -104,36 +132,45 @@ macro_rules! impl_resolve_for_integer {
 
 impl_resolve_for_integer!(i8, i16, i32, i128, u8, u16, u32, u64, u128);
 
-impl ResolveValue for f32 {
+impl Resolve for f32 {
     const KIND: CommandOptionType = CommandOptionType::Number;
 
-    fn resolve_value(value: &CommandDataOptionValue) -> AnyResult<Self> {
-        match value {
-            CommandDataOptionValue::Number(value) => Ok(*value as f32),
-            _ => Err(ResolveError::InvalidType)?,
-        }
+    fn resolve<'a>(
+        name: &str,
+        options: impl Iterator<Item = &'a CommandDataOption>,
+    ) -> ResolveResult<Self> {
+        find_and_resolve_option::<Self>(name, options).and_then(|value| match value {
+            CommandDataOptionValue::Number(value) => Ok(*value as Self),
+            _ => Err(ResolveError::InvalidType),
+        })
     }
 }
 
-impl ResolveValue for User {
+impl Resolve for User {
     const KIND: CommandOptionType = CommandOptionType::User;
 
-    fn resolve_value(value: &CommandDataOptionValue) -> AnyResult<Self> {
-        match value {
+    fn resolve<'a>(
+        name: &str,
+        options: impl Iterator<Item = &'a CommandDataOption>,
+    ) -> ResolveResult<Self> {
+        find_and_resolve_option::<Self>(name, options).and_then(|value| match value {
             CommandDataOptionValue::User(value, _) => Ok(value.clone()),
-            _ => Err(ResolveError::InvalidType)?,
-        }
+            _ => Err(ResolveError::InvalidType),
+        })
     }
 }
 
-impl ResolveValue for Option<PartialMember> {
+impl Resolve for Option<PartialMember> {
     const KIND: CommandOptionType = CommandOptionType::User;
 
-    fn resolve_value(value: &CommandDataOptionValue) -> AnyResult<Self> {
-        match value {
+    fn resolve<'a>(
+        name: &str,
+        options: impl Iterator<Item = &'a CommandDataOption>,
+    ) -> ResolveResult<Self> {
+        find_and_resolve_option::<Self>(name, options).and_then(|value| match value {
             CommandDataOptionValue::User(_, value) => Ok(value.clone()),
-            _ => Err(ResolveError::InvalidType)?,
-        }
+            _ => Err(ResolveError::InvalidType),
+        })
     }
 }
 
@@ -143,24 +180,19 @@ pub enum Mentionable {
     Role(Role),
 }
 
-impl ResolveValue for Mentionable {
+impl Resolve for Mentionable {
     const KIND: CommandOptionType = CommandOptionType::Mentionable;
 
-    fn resolve_value(value: &CommandDataOptionValue) -> AnyResult<Self> {
-        match value {
+    fn resolve<'a>(
+        name: &str,
+        options: impl Iterator<Item = &'a CommandDataOption>,
+    ) -> ResolveResult<Self> {
+        find_and_resolve_option::<Self>(name, options).and_then(|value| match value {
             CommandDataOptionValue::User(user, partial_member) => {
                 Ok(Mentionable::User(user.clone(), partial_member.clone()))
             }
             CommandDataOptionValue::Role(role) => Ok(Mentionable::Role(role.clone())),
-            _ => Err(ResolveError::InvalidType)?,
-        }
+            _ => Err(ResolveError::InvalidType),
+        })
     }
-}
-
-pub fn resolve_parameter<R: Resolve>(options: &Vec<CommandDataOption>, name: &str) -> AnyResult<R> {
-    options
-        .iter()
-        .find(|option| option.name == name)
-        .map(R::resolve)
-        .unwrap_or_else(|| Err(format!("Missing parameter: {name}.").into()))
 }
