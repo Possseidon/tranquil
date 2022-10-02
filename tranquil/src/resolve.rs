@@ -18,11 +18,12 @@ pub enum ResolveError {
     Unresolvable,
     InvalidType,
     IntegerRangeError,
+    NumberRangeError,
     NoPartialMemberData,
     Other(AnyError),
 }
 
-type ResolveResult<T> = Result<T, ResolveError>;
+pub type ResolveResult<T> = Result<T, ResolveError>;
 
 impl std::error::Error for ResolveError {}
 
@@ -32,7 +33,8 @@ impl fmt::Display for ResolveError {
             ResolveError::Missing => write!(f, "parameter not specified"),
             ResolveError::Unresolvable => write!(f, "paremeter is unresolvable"),
             ResolveError::InvalidType => write!(f, "parameter has invalid type"),
-            ResolveError::IntegerRangeError => write!(f, "parameter is out of range"),
+            ResolveError::IntegerRangeError => write!(f, "integer out of range"),
+            ResolveError::NumberRangeError => write!(f, "number out of range"),
             ResolveError::NoPartialMemberData => write!(f, "no partial member data available"),
             ResolveError::Other(error) => error.fmt(f),
         }
@@ -68,6 +70,14 @@ pub trait Resolve: Sized {
     }
 
     fn max_int_value() -> Option<i64> {
+        None
+    }
+
+    fn min_number_value() -> Option<f64> {
+        None
+    }
+
+    fn max_number_value() -> Option<f64> {
         None
     }
 
@@ -109,7 +119,7 @@ macro_rules! impl_resolve {
                 })
             }
         }
-    )* }
+    )* };
 }
 
 impl_resolve! {
@@ -147,7 +157,7 @@ macro_rules! impl_resolve_for_integer {
                 })
             }
         }
-    )* }
+    )* };
 }
 
 impl_resolve_for_integer!(i8, i16, i32, i128, isize, u8, u16, u32, u64, u128, usize);
@@ -244,7 +254,7 @@ macro_rules! impl_resolve_for_bounded {
                 })
             }
         }
-    )* }
+    )* };
 }
 
 impl_resolve_for_bounded! {
@@ -260,4 +270,68 @@ impl_resolve_for_bounded! {
     u64 => BoundedU64,
     u128 => BoundedU128,
     usize => BoundedUsize,
+}
+
+#[macro_export]
+macro_rules! bounded_number {
+    (@make($v:vis $name:ident: $min:expr, $max:expr)) => {
+        #[derive(
+            ::std::clone::Clone,
+            ::std::marker::Copy,
+            ::std::fmt::Debug,
+            // No default derive or manual implementation, as 0.0 can lie outside the valid range.
+            ::std::cmp::PartialEq,
+            ::std::cmp::PartialOrd
+        )]
+        $v struct $name(::std::primitive::f64);
+
+        impl $crate::resolve::Resolve for $name {
+            const KIND: $crate::serenity::model::application::command::CommandOptionType =
+                <::std::primitive::f64 as $crate::resolve::Resolve>::KIND;
+
+            fn min_number_value() -> ::std::option::Option<::std::primitive::f64> {
+                $min
+            }
+
+            fn max_number_value() -> ::std::option::Option<::std::primitive::f64> {
+                $max
+            }
+
+            fn resolve<'a>(
+                name: &::std::primitive::str,
+                options: impl Iterator<Item = &'a $crate::serenity::model::application::interaction::application_command::CommandDataOption>,
+            ) -> $crate::resolve::ResolveResult<Self> {
+                <::std::primitive::f64 as $crate::resolve::Resolve>::resolve(name, options).and_then(Self::try_from)
+            }
+        }
+
+        impl ::std::convert::From<$name> for f64 {
+            fn from(value: $name) -> Self {
+                value.0
+            }
+        }
+
+        impl ::std::convert::TryFrom<::std::primitive::f64> for $name {
+            type Error = $crate::resolve::ResolveError;
+
+            fn try_from(value: ::std::primitive::f64) -> ::std::result::Result<Self, Self::Error> {
+                let min_ok = <Self as $crate::resolve::Resolve>::min_number_value().map_or(true, |min| value >= min);
+                let max_ok = <Self as $crate::resolve::Resolve>::max_number_value().map_or(true, |max| value <= max);
+                if min_ok && max_ok {
+                    ::std::result::Result::Ok(Self(value))
+                } else {
+                    ::std::result::Result::Err($crate::resolve::ResolveError::NumberRangeError)?
+                }
+            }
+        }
+    };
+    ($v:vis $name:ident: $min:literal..) => {
+        bounded_number!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::None));
+    };
+    ($v:vis $name:ident: ..=$max:literal) => {
+        bounded_number!(@make($v $name: ::std::option::Option::None, ::std::option::Option::Some($max)));
+    };
+    ($v:vis $name:ident: $min:literal..=$max:literal) => {
+        bounded_number!(@make($v $name: ::std::option::Option::Some($min), ::std::option::Option::Some($max)));
+    };
 }
