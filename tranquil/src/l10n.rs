@@ -262,5 +262,7 @@ impl TranslatedCommands {
 }
 
 pub trait CommandL10nProvider {
-    fn translations_filepath(&self) -> &'static str;
+    fn l10n_path(&self) -> Option<&'static str> {
+        None
+    }
 }
