@@ -97,9 +97,7 @@ impl Bot {
 
     async fn load_translations(&mut self) -> AnyResult<()> {
         self.translated_commands = TranslatedCommands::from_files(
-            self.modules
-                .iter()
-                .map(|module| module.translations_filepath()),
+            self.modules.iter().filter_map(|module| module.l10n_path()),
         )
         .await?;
         Ok(())
