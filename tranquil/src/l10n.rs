@@ -112,6 +112,8 @@ struct CommandTranslations {
     #[serde(default)]
     description: Translations,
     #[serde(default)]
+    subcommands: HashMap<String, CommandTranslations>,
+    #[serde(default)]
     options: HashMap<String, OptionTranslations>,
 }
 
@@ -158,6 +160,32 @@ fn get_default_translation(translations: Option<&Translations>) -> &str {
     translations
         .and_then(|translations| translations.0.get(&Locale::default()).map(AsRef::as_ref))
         .unwrap_or("n/a")
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CommandPathRef<'a> {
+    Command {
+        name: &'a str,
+    },
+    Subcommand {
+        name: &'a str,
+        subcommand: &'a str,
+    },
+    Grouped {
+        name: &'a str,
+        group: &'a str,
+        subcommand: &'a str,
+    },
+}
+
+impl<'a> CommandPathRef<'a> {
+    pub(crate) fn subcommand(self) -> &'a str {
+        match self {
+            CommandPathRef::Command { name: subcommand }
+            | CommandPathRef::Subcommand { subcommand, .. }
+            | CommandPathRef::Grouped { subcommand, .. } => subcommand,
+        }
+    }
 }
 
 impl TranslatedCommands {
@@ -210,19 +238,40 @@ impl TranslatedCommands {
         }
     }
 
-    pub(crate) fn describe_command(
-        &self,
-        command_name: &str,
-        command: &mut CreateApplicationCommand,
-    ) {
-        command
-            .name(&command_name)
-            .description(get_default_translation({
-                self.0
-                    .get(command_name)
-                    .map(|translations| &translations.description)
-            }));
-        if let Some(translations) = self.0.get(command_name) {
+    fn resolve_name(&self, name: &str) -> Option<&CommandTranslations> {
+        self.0.get(name)
+    }
+
+    fn resolve_path(&self, path: CommandPathRef) -> Option<&CommandTranslations> {
+        match path {
+            CommandPathRef::Command { name } => self.resolve_name(name),
+            CommandPathRef::Subcommand { name, subcommand } => self
+                .resolve_name(name)
+                .and_then(|command_translations| command_translations.subcommands.get(subcommand)),
+            CommandPathRef::Grouped {
+                name,
+                group,
+                subcommand,
+            } => self
+                .resolve_name(name)
+                .and_then(|command_translations| command_translations.subcommands.get(group))
+                .and_then(|command_translations| command_translations.subcommands.get(subcommand)),
+        }
+    }
+
+    fn resolve_option(&self, path: CommandPathRef, name: &str) -> Option<&OptionTranslations> {
+        self.resolve_path(path)
+            .and_then(|translations| translations.options.get(name))
+    }
+
+    pub(crate) fn describe_command(&self, name: &str, command: &mut CreateApplicationCommand) {
+        let translations = self.resolve_name(name);
+        let description =
+            get_default_translation(translations.map(|translations| &translations.description));
+
+        command.name(name).description(description);
+
+        if let Some(translations) = translations {
             for (locale, translation) in &translations.name.0 {
                 command.name_localized(locale.to_string(), translation);
             }
@@ -232,30 +281,45 @@ impl TranslatedCommands {
         }
     }
 
-    pub fn describe_option(
+    pub(crate) fn describe_subcommand(
         &self,
-        command_name: &str,
-        command_option_name: &str,
+        path: CommandPathRef,
         option: &mut CreateApplicationCommandOption,
     ) {
-        option
-            .name(command_option_name)
-            .description(get_default_translation({
-                self.0
-                    .get(command_name)
-                    .map(|command_translations| &command_translations.options)
-                    .and_then(|option_translations| option_translations.get(command_option_name))
-                    .map(|option_translation| &option_translation.description)
-            }));
-        if let Some(command_translations) = self.0.get(command_name) {
-            if let Some(option_translations) = command_translations.options.get(command_option_name)
-            {
-                for (locale, translation) in &option_translations.name.0 {
-                    option.name_localized(locale, translation);
-                }
-                for (locale, translation) in &option_translations.description.0 {
-                    option.description_localized(locale, translation);
-                }
+        let translations = self.resolve_path(path);
+        let description =
+            get_default_translation(translations.map(|translations| &translations.description));
+
+        option.name(path.subcommand()).description(description);
+
+        if let Some(translations) = translations {
+            for (locale, translation) in &translations.name.0 {
+                option.name_localized(locale.to_string(), translation);
+            }
+            for (locale, translation) in &translations.description.0 {
+                option.description_localized(locale.to_string(), translation);
+            }
+        }
+    }
+
+    pub fn describe_option(
+        &self,
+        path: CommandPathRef,
+        name: &str,
+        option: &mut CreateApplicationCommandOption,
+    ) {
+        let translations = self.resolve_option(path, name);
+        let description =
+            get_default_translation(translations.map(|translations| &translations.description));
+
+        option.name(name).description(description);
+
+        if let Some(translations) = translations {
+            for (locale, translation) in &translations.name.0 {
+                option.name_localized(locale.to_string(), translation);
+            }
+            for (locale, translation) in &translations.description.0 {
+                option.description_localized(locale.to_string(), translation);
             }
         }
     }

@@ -1,28 +1,107 @@
-use convert_case::{Case, Casing};
 use indoc::indoc;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    parse_macro_input, spanned::Spanned, AttributeArgs, FnArg, ImplItem, ItemFn, ItemImpl, Lit,
-    Meta, MetaNameValue, NestedMeta, PatType,
+    parse_macro_input, spanned::Spanned, AttributeArgs, FnArg, Ident, ImplItem, ItemFn, ItemImpl,
+    Lit, LitStr, Meta, MetaNameValue, NestedMeta, PatType,
 };
 
-enum Rename {
-    ConvertCase(Case),
-    To(String),
+enum CommandPath {
+    Command {
+        name: String,
+    },
+    Subcommand {
+        name: String,
+        subcommand: String,
+    },
+    Grouped {
+        name: String,
+        group: String,
+        subcommand: String,
+    },
 }
 
 #[derive(Default)]
 struct Attributes {
-    rename: Option<Rename>,
+    rename: Option<CommandPath>,
 }
 
-fn invalid_attribute(span: impl Spanned) -> TokenStream {
+trait CommandString: Spanned {
+    fn to_command_string(&self) -> String;
+}
+
+impl CommandString for LitStr {
+    fn to_command_string(&self) -> String {
+        self.value()
+    }
+}
+
+impl CommandString for Ident {
+    fn to_command_string(&self) -> String {
+        self.to_string()
+    }
+}
+
+fn parse_command(
+    rename: &impl CommandString,
+    split_char: char,
+) -> Result<CommandPath, TokenStream> {
+    let command_string = rename.to_command_string();
+
+    if command_string.is_empty() {
+        Err(TokenStream::from(
+            syn::Error::new(rename.span(), "commands cannot be empty").into_compile_error(),
+        ))?
+    }
+
+    let parts = command_string.split(split_char).collect::<Vec<_>>();
+
+    if parts.iter().any(|part| part.is_empty()) {
+        Err(TokenStream::from(
+            syn::Error::new(
+                rename.span(),
+                format!(
+                    indoc! {r#"
+                    invalid command name, valid command names are:
+                        `command`
+                        `command{}subcommand`
+                        `command{}group{}subcommand`
+                    "#},
+                    split_char, split_char, split_char
+                ),
+            )
+            .into_compile_error(),
+        ))?;
+    }
+
+    match parts.as_slice() {
+        [name, group, subcommand] => Ok(CommandPath::Grouped {
+            name: name.to_string(),
+            group: group.to_string(),
+            subcommand: subcommand.to_string(),
+        }),
+        [name, subcommand] => Ok(CommandPath::Subcommand {
+            name: name.to_string(),
+            subcommand: subcommand.to_string(),
+        }),
+        [name] => Ok(CommandPath::Command {
+            name: name.to_string(),
+        }),
+        _ => Err(TokenStream::from(
+            syn::Error::new(
+                rename.span(),
+                "commands can only have two levels of nesting",
+            )
+            .into_compile_error(),
+        ))?,
+    }
+}
+
+fn invalid_attribute(span: &impl Spanned) -> TokenStream {
     syn::Error::new(
         span.span(),
         indoc! {r#"
             available attributes are
-                `case = "..."`
                 `rename = "..."`
         "#},
     )
@@ -30,73 +109,16 @@ fn invalid_attribute(span: impl Spanned) -> TokenStream {
     .into()
 }
 
-fn parse_case(case: &str) -> Option<Case> {
-    // Discord does not allow uppercase names.
-    match case {
-        // "camel" => Some(Case::Camel),
-        // "pascal" => Some(Case::Pascal),
-        // "upper-camel" => Some(Case::UpperCamel),
-        "snake" => Some(Case::Snake),
-        // "upper-snake" => Some(Case::UpperSnake),
-        // "screaming-snake" => Some(Case::ScreamingSnake),
-        "kebab" => Some(Case::Kebab),
-        // "cobol" => Some(Case::Cobol),
-        // "upper-kebab" => Some(Case::UpperKebab),
-        // "train" => Some(Case::Train),
-        "flat" => Some(Case::Flat),
-        // "upper-flat" => Some(Case::UpperFlat),
-        _ => None,
-    }
+fn invalid_rename_literal(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(span.span(), "string expected")
+        .into_compile_error()
+        .into()
 }
 
-fn invalid_case(name: &str, span: impl Spanned) -> TokenStream {
-    syn::Error::new(
-        span.span(),
-        format!(
-            indoc! {r#"
-                available case transformations are
-                    `case = "snake"`           -> {}
-                    `case = "kebab"`           -> {}
-                    `case = "flat"`            -> {}
-            "#},
-            // name.to_case(Case::Camel),
-            // name.to_case(Case::Pascal),
-            // name.to_case(Case::UpperCamel),
-            name.to_case(Case::Snake),
-            // name.to_case(Case::UpperSnake),
-            // name.to_case(Case::ScreamingSnake),
-            name.to_case(Case::Kebab),
-            // name.to_case(Case::Cobol),
-            // name.to_case(Case::UpperKebab),
-            // name.to_case(Case::Train),
-            name.to_case(Case::Flat),
-            // name.to_case(Case::UpperFlat),
-        ),
-    )
-    .into_compile_error()
-    .into()
-}
-
-fn invalid_rename_literal(span: impl Spanned) -> TokenStream {
-    syn::Error::new(
-        span.span(),
-        indoc! {r#"
-            string expected
-        "#},
-    )
-    .into_compile_error()
-    .into()
-}
-
-fn multiple_renames(span: impl Spanned) -> TokenStream {
-    syn::Error::new(
-        span.span(),
-        indoc! {r#"
-            only one rename or case transformation can be applied
-        "#},
-    )
-    .into_compile_error()
-    .into()
+fn multiple_renames(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(span.span(), "only one rename can be applied")
+        .into_compile_error()
+        .into()
 }
 
 #[proc_macro_attribute]
@@ -116,28 +138,16 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
             match nested_meta {
                 NestedMeta::Meta(Meta::NameValue(MetaNameValue { path, lit, .. })) => {
                     let ident = path.get_ident();
-                    if ident.map_or(false, |ident| ident == "case") {
-                        match lit {
-                            Lit::Str(lit_str) => {
-                                if let Some(case) = parse_case(&lit_str.value()) {
-                                    if attributes.rename.is_some() {
-                                        errors.push(multiple_renames(&nested_meta));
-                                    } else {
-                                        attributes.rename = Some(Rename::ConvertCase(case));
-                                    }
-                                } else {
-                                    errors.push(invalid_case(&name.to_string(), &lit_str));
-                                }
-                            }
-                            _ => errors.push(invalid_case(&name.to_string(), &lit)),
-                        }
-                    } else if ident.map_or(false, |ident| ident == "rename") {
+                    if ident.map_or(false, |ident| ident == "rename") {
                         match lit {
                             Lit::Str(lit_str) => {
                                 if attributes.rename.is_some() {
                                     errors.push(multiple_renames(&nested_meta));
                                 } else {
-                                    attributes.rename = Some(Rename::To(lit_str.value()));
+                                    match parse_command(lit_str, ' ') {
+                                        Ok(command) => attributes.rename = Some(command),
+                                        Err(error) => errors.push(error),
+                                    }
                                 }
                             }
                             _ => errors.push(invalid_rename_literal(&lit)),
@@ -154,11 +164,14 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
         attributes
     };
 
-    let command_name = attributes
+    let command_path = attributes
         .rename
-        .map_or(name.to_string(), |rename| match rename {
-            Rename::ConvertCase(case) => name.to_string().to_case(case),
-            Rename::To(name) => name,
+        .map_or_else(|| parse_command(&name, '_'), Ok)
+        .unwrap_or_else(|error| {
+            errors.push(error);
+            CommandPath::Command {
+                name: name.to_string(),
+            }
         });
 
     let typed_parameters = item_fn
@@ -182,6 +195,50 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     });
 
+    let make_command_path = |reference| {
+        let command_path_or_ref = if reference {
+            quote! { l10n::CommandPathRef }
+        } else {
+            quote! { command::CommandPath }
+        };
+
+        let to_string = if reference {
+            quote! {}
+        } else {
+            quote! { .to_string() }
+        };
+
+        match &command_path {
+            CommandPath::Command { name } => {
+                quote! {
+                    ::tranquil::#command_path_or_ref::Command {
+                        name: #name #to_string
+                    }
+                }
+            }
+            CommandPath::Subcommand { name, subcommand } => quote! {
+                ::tranquil::#command_path_or_ref::Subcommand {
+                    name: #name #to_string,
+                    subcommand: #subcommand #to_string,
+                }
+            },
+            CommandPath::Grouped {
+                name,
+                group,
+                subcommand,
+            } => quote! {
+                ::tranquil::#command_path_or_ref::Grouped {
+                    name: #name #to_string,
+                    group: #group #to_string,
+                    subcommand: #subcommand #to_string,
+                }
+            },
+        }
+    };
+
+    let command_path = make_command_path(false);
+    let command_path_ref = make_command_path(true);
+
     let command_options = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
         quote! {
             (|translated_commands: &::tranquil::l10n::TranslatedCommands| {
@@ -189,10 +246,9 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                 <#ty as ::tranquil::resolve::Resolve>::describe(
                     option
                         .kind(<#ty as ::tranquil::resolve::Resolve>::KIND)
-                        .name(::std::stringify!(#pat))
                         .required(<#ty as ::tranquil::resolve::Resolve>::REQUIRED)
                 );
-                translated_commands.describe_option(stringify!(#name), stringify!(#pat), &mut option);
+                translated_commands.describe_option(#command_path_ref, ::std::stringify!(#pat), &mut option);
                 option
             }) as fn(&::tranquil::l10n::TranslatedCommands) -> ::serenity::builder::CreateApplicationCommandOption
         }
@@ -203,22 +259,24 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         fn #name(
             self: ::std::sync::Arc<Self>
-        ) -> ::std::boxed::Box<dyn ::tranquil::command::CommandImpl> {
-            ::std::boxed::Box::new(::tranquil::command::Command::new(
-                #command_name,
-                ::std::boxed::Box::new(|ctx, interaction, module: ::std::sync::Arc<Self>| {
-                    ::std::boxed::Box::pin(async move {
-                        let options = interaction.data.options.iter();
-                        #(#parameter_resolvers)*
-                        module.#impl_name(
-                            ::tranquil::command::CommandContext{ ctx, interaction },
-                            #(#parameters),*
-                        ).await
-                    })
-                }),
-                ::std::vec![#(#command_options),*],
-                self,
-            ))
+        ) -> (::tranquil::command::CommandPath, ::std::boxed::Box<dyn ::tranquil::command::Command>) {
+            (
+                #command_path,
+                ::std::boxed::Box::new(::tranquil::command::ModuleCommand::new(
+                    ::std::boxed::Box::new(|ctx, interaction, module: ::std::sync::Arc<Self>| {
+                        ::std::boxed::Box::pin(async move {
+                            let options = ::tranquil::command::resolve_command_options(&interaction.data).iter();
+                            #(#parameter_resolvers)*
+                            module.#impl_name(
+                                ::tranquil::command::CommandContext{ ctx, interaction },
+                                #(#parameters),*
+                            ).await
+                        })
+                    }),
+                    ::std::vec![#(#command_options),*],
+                    self,
+                )),
+            )
         }
     });
     result.extend(errors);
@@ -239,10 +297,12 @@ pub fn command_provider(_attr: TokenStream, item: TokenStream) -> TokenStream {
         #impl_item
 
         impl ::tranquil::command::CommandProvider for #type_name {
-            fn commands(
+            fn command_map(
                 self: ::std::sync::Arc<Self>,
-            ) -> ::tranquil::command::Commands {
-                ::std::vec![#(Self::#commands(self.clone())),*]
+            ) -> ::std::result::Result<::tranquil::command::CommandMap, ::tranquil::command::CommandMapMergeError> {
+                ::tranquil::command::create_command_map([
+                    #(Self::#commands(self.clone())),*
+                ])
             }
         }
     })
