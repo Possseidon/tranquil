@@ -14,7 +14,10 @@ use serenity::{
     framework::StandardFramework,
     http::Http,
     model::{
-        application::{command::Command, interaction::Interaction},
+        application::{
+            command::{Command, CommandOptionType},
+            interaction::Interaction,
+        },
         event::Event,
         gateway::{GatewayIntents, Ready},
         guild::{Guild, UnavailableGuild},
@@ -23,7 +26,12 @@ use serenity::{
     utils::colours as colors,
 };
 
-use crate::{command::Commands, l10n::TranslatedCommands, module::Module, AnyError, AnyResult};
+use crate::{
+    command::{CommandMap, CommandMapEntry, CommandMapMergeError, CommandPath, SubcommandMapEntry},
+    l10n::{CommandPathRef, TranslatedCommands},
+    module::Module,
+    AnyError, AnyResult,
+};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ApplicationCommandUpdate {
@@ -36,7 +44,7 @@ pub enum ApplicationCommandUpdate {
 pub struct Bot {
     already_connected: AtomicBool,
     application_command_update: Option<ApplicationCommandUpdate>,
-    commands: Commands,
+    command_map: CommandMap,
     modules: Vec<Arc<dyn Module>>,
     translated_commands: TranslatedCommands,
 }
@@ -46,7 +54,7 @@ impl Default for Bot {
         Self {
             already_connected: Default::default(),
             application_command_update: Some(ApplicationCommandUpdate::default()),
-            commands: Default::default(),
+            command_map: Default::default(),
             modules: Default::default(),
             translated_commands: Default::default(),
         }
@@ -66,11 +74,11 @@ impl Bot {
         self
     }
 
-    pub fn register(mut self, module: impl Module + 'static) -> Self {
+    pub fn register(mut self, module: impl Module + 'static) -> Result<Self, CommandMapMergeError> {
         let module = Arc::new(module);
-        self.commands.append(&mut module.clone().commands());
+        self.command_map = self.command_map.merge(module.clone().command_map()?)?;
         self.modules.push(module);
-        self
+        Ok(self)
     }
 
     pub async fn run(mut self, token: impl AsRef<str>) -> AnyResult<()> {
@@ -104,16 +112,65 @@ impl Bot {
     }
 
     fn create_application_commands(&self) -> Vec<CreateApplicationCommand> {
-        self.commands
+        self.command_map
             .iter()
-            .map(|command| {
+            .map(|(name, command)| {
                 let mut application_command = CreateApplicationCommand::default();
+
                 self.translated_commands
-                    .describe_command(command.name(), &mut application_command);
-                command.create_application_command(
-                    &self.translated_commands,
-                    &mut application_command,
-                );
+                    .describe_command(name, &mut application_command);
+
+                match command {
+                    CommandMapEntry::Command(command) => {
+                        command.add_options(&self.translated_commands, &mut application_command);
+                    }
+                    CommandMapEntry::Subcommands(subcommands) => {
+                        for (subcommand, entry) in subcommands {
+                            application_command.create_option(|option| {
+                                self.translated_commands.describe_subcommand(
+                                    CommandPathRef::Subcommand { name, subcommand },
+                                    option,
+                                );
+
+                                match entry {
+                                    SubcommandMapEntry::Subcommand(command) => {
+                                        option.kind(CommandOptionType::SubCommand);
+
+                                        command.add_suboptions(&self.translated_commands, option);
+                                    }
+                                    SubcommandMapEntry::Group(command_map) => {
+                                        let group = subcommand;
+                                        option.kind(CommandOptionType::SubCommandGroup);
+                                        for (subcommand, command) in command_map {
+                                            option.create_sub_option(|option| {
+                                                self.translated_commands.describe_subcommand(
+                                                    CommandPathRef::Grouped {
+                                                        name,
+                                                        group,
+                                                        subcommand,
+                                                    },
+                                                    option,
+                                                );
+
+                                                option.kind(CommandOptionType::SubCommand);
+
+                                                command.add_suboptions(
+                                                    &self.translated_commands,
+                                                    option,
+                                                );
+
+                                                option
+                                            });
+                                        }
+                                    }
+                                }
+
+                                option
+                            });
+                        }
+                    }
+                }
+
                 application_command
             })
             .collect()
@@ -276,11 +333,8 @@ impl EventHandler for Bot {
         async {
             match interaction {
                 Interaction::ApplicationCommand(interaction) => {
-                    let command_name = &interaction.data.name;
-                    let command = self
-                        .commands
-                        .iter()
-                        .find(|command| command.name() == command_name);
+                    let command_path = CommandPath::resolve(&interaction.data);
+                    let command = self.command_map.find_command(&command_path);
 
                     match command {
                         Some(command) => command.run(ctx, interaction).await?,
@@ -290,7 +344,7 @@ impl EventHandler for Bot {
                                     response.interaction_response_data(|data| {
                                         data.embed(|embed| {
                                             embed.color(colors::css::DANGER).field(
-                                                format!(":x: Unknown command: `/{command_name}`"),
+                                                format!(":x: Unknown command: `/{command_path}`"),
                                                 "Bot commands are likely outdated.".to_string(),
                                                 false,
                                             )
@@ -308,7 +362,7 @@ impl EventHandler for Bot {
                         .await?
                 }
                 _ => {}
-            };
+            }
             Ok::<(), AnyError>(())
         }
         .await
