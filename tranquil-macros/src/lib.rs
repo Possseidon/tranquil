@@ -300,7 +300,7 @@ pub fn command_provider(_attr: TokenStream, item: TokenStream) -> TokenStream {
             fn command_map(
                 self: ::std::sync::Arc<Self>,
             ) -> ::std::result::Result<::tranquil::command::CommandMap, ::tranquil::command::CommandMapMergeError> {
-                ::tranquil::command::create_command_map([
+                ::tranquil::command::CommandMap::new([
                     #(Self::#commands(self.clone())),*
                 ])
             }

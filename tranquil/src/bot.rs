@@ -27,10 +27,7 @@ use serenity::{
 };
 
 use crate::{
-    command::{
-        find_command, merge_command_maps, resolve_command_path, CommandMap, CommandMapEntry,
-        CommandMapMergeError, SubcommandMapEntry,
-    },
+    command::{CommandMap, CommandMapEntry, CommandMapMergeError, CommandPath, SubcommandMapEntry},
     l10n::{CommandPathRef, TranslatedCommands},
     module::Module,
     AnyError, AnyResult,
@@ -79,7 +76,7 @@ impl Bot {
 
     pub fn register(mut self, module: impl Module + 'static) -> Result<Self, CommandMapMergeError> {
         let module = Arc::new(module);
-        self.command_map = merge_command_maps(self.command_map, module.clone().command_map()?)?;
+        self.command_map = self.command_map.merge(module.clone().command_map()?)?;
         self.modules.push(module);
         Ok(self)
     }
@@ -336,8 +333,8 @@ impl EventHandler for Bot {
         async {
             match interaction {
                 Interaction::ApplicationCommand(interaction) => {
-                    let command_path = resolve_command_path(&interaction.data);
-                    let command = find_command(&self.command_map, &command_path);
+                    let command_path = CommandPath::resolve(&interaction.data);
+                    let command = self.command_map.find_command(&command_path);
 
                     match command {
                         Some(command) => command.run(ctx, interaction).await?,

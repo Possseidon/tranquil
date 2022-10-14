@@ -68,29 +68,31 @@ impl Display for InvalidCommandData {
 
 impl Error for InvalidCommandData {}
 
-pub(crate) fn resolve_command_path(command_data: &CommandData) -> CommandPath {
-    match command_data.options.as_slice() {
-        [group]
-            if group.kind == CommandOptionType::SubCommand
-                || group.kind == CommandOptionType::SubCommandGroup =>
-        {
-            match group.options.as_slice() {
-                [subcommand] if subcommand.kind == CommandOptionType::SubCommand => {
-                    CommandPath::Grouped {
-                        name: command_data.name.clone(),
-                        group: group.name.clone(),
-                        subcommand: subcommand.name.clone(),
+impl CommandPath {
+    pub(crate) fn resolve(command_data: &CommandData) -> CommandPath {
+        match command_data.options.as_slice() {
+            [group]
+                if group.kind == CommandOptionType::SubCommand
+                    || group.kind == CommandOptionType::SubCommandGroup =>
+            {
+                match group.options.as_slice() {
+                    [subcommand] if subcommand.kind == CommandOptionType::SubCommand => {
+                        CommandPath::Grouped {
+                            name: command_data.name.clone(),
+                            group: group.name.clone(),
+                            subcommand: subcommand.name.clone(),
+                        }
                     }
+                    _ => CommandPath::Subcommand {
+                        name: command_data.name.clone(),
+                        subcommand: group.name.clone(),
+                    },
                 }
-                _ => CommandPath::Subcommand {
-                    name: command_data.name.clone(),
-                    subcommand: group.name.clone(),
-                },
             }
+            _ => CommandPath::Command {
+                name: command_data.name.clone(),
+            },
         }
-        _ => CommandPath::Command {
-            name: command_data.name.clone(),
-        },
     }
 }
 
@@ -162,6 +164,12 @@ pub trait Command: Send + Sync {
     );
 
     async fn run(&self, ctx: Context, interaction: ApplicationCommandInteraction) -> AnyResult<()>;
+}
+
+impl Debug for dyn Command {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "dyn Command")
+    }
 }
 
 #[async_trait]
@@ -247,196 +255,240 @@ pub struct CommandContext {
     pub interaction: ApplicationCommandInteraction,
 }
 
-pub enum SubcommandMapEntry {
-    Subcommand(Box<dyn Command>),
-    Group(HashMap<String, Box<dyn Command>>),
-}
+#[derive(Debug, Default)]
+pub struct CommandMap(HashMap<String, CommandMapEntry>);
 
-pub type SubcommandMap = HashMap<String, SubcommandMapEntry>;
-
+#[derive(Debug)]
 pub enum CommandMapEntry {
     Command(Box<dyn Command>),
     Subcommands(SubcommandMap),
 }
 
-pub type CommandMap = HashMap<String, CommandMapEntry>;
+#[derive(Debug, Default)]
+pub struct SubcommandMap(HashMap<String, SubcommandMapEntry>);
 
-fn command_map_entry(path: CommandPath, command: Box<dyn Command>) -> (String, CommandMapEntry) {
-    match path {
-        CommandPath::Command { name } => (name, CommandMapEntry::Command(command)),
-        CommandPath::Subcommand { name, subcommand } => (
-            name,
-            CommandMapEntry::Subcommands(
-                [(subcommand, SubcommandMapEntry::Subcommand(command))].into(),
-            ),
-        ),
-        CommandPath::Grouped {
-            name,
-            group,
-            subcommand,
-        } => (
-            name,
-            CommandMapEntry::Subcommands(
-                [(
-                    group,
-                    SubcommandMapEntry::Group([(subcommand, command)].into()),
-                )]
-                .into(),
-            ),
-        ),
+#[derive(Debug)]
+pub enum SubcommandMapEntry {
+    Subcommand(Box<dyn Command>),
+    Group(SubcommandGroupMap),
+}
+
+#[derive(Debug)]
+pub struct SubcommandGroupMap(HashMap<String, Box<dyn Command>>);
+
+impl CommandMap {
+    pub fn new(
+        commands: impl IntoIterator<Item = (CommandPath, Box<dyn Command>)>,
+    ) -> Result<Self, CommandMapMergeError> {
+        Self::default().merge(
+            commands
+                .into_iter()
+                .map(|(path, command)| CommandMapEntry::name_and_new(path, command)),
+        )
     }
-}
 
-pub fn create_command_map(
-    commands: impl IntoIterator<Item = (CommandPath, Box<dyn Command>)>,
-) -> Result<CommandMap, CommandMapMergeError> {
-    merge_command_maps(
-        Default::default(),
-        commands
-            .into_iter()
-            .map(|(path, command)| command_map_entry(path, command)),
-    )
-}
-
-pub(crate) fn merge_command_maps(
-    mut command_map: CommandMap,
-    new_commands: impl IntoIterator<Item = (String, CommandMapEntry)>,
-) -> Result<CommandMap, CommandMapMergeError> {
-    for (name, new_entry) in new_commands {
-        command_map_add_entry(&mut command_map, name, new_entry)?;
-    }
-    Ok(command_map)
-}
-
-fn merge_subcommand_groups(
-    group_commandmap: &mut HashMap<String, Box<dyn Command>>,
-    name: String,
-    group: String,
-    new_group_commandmap: HashMap<String, Box<dyn Command>>,
-) -> Result<(), CommandMapMergeError> {
-    for (subcommand, new_entry) in new_group_commandmap {
-        if let Entry::Vacant(entry) = group_commandmap.entry(subcommand.clone()) {
-            entry.insert(new_entry);
-        } else {
-            Err(CommandMapMergeError::DuplicateCommand {
-                path: CommandPath::Grouped {
-                    name: name.clone(),
-                    group: group.clone(),
-                    subcommand,
-                },
-            })?
+    pub(crate) fn merge(
+        mut self,
+        commands: impl IntoIterator<Item = (String, CommandMapEntry)>,
+    ) -> Result<Self, CommandMapMergeError> {
+        for (name, new_entry) in commands {
+            self.add_entry(name, new_entry)?;
         }
+        Ok(self)
     }
-    Ok(())
-}
 
-fn merge_subcommand_map_entry(
-    entry: &mut SubcommandMapEntry,
-    name: String,
-    subcommand: String,
-    new_entry: SubcommandMapEntry,
-) -> Result<(), CommandMapMergeError> {
-    match (entry, new_entry) {
-        (SubcommandMapEntry::Subcommand(_), SubcommandMapEntry::Subcommand(_)) => {
-            Err(CommandMapMergeError::DuplicateCommand {
-                path: CommandPath::Subcommand { name, subcommand },
+    fn add_entry(
+        &mut self,
+        name: String,
+        new_entry: CommandMapEntry,
+    ) -> Result<(), CommandMapMergeError> {
+        match self.0.entry(name.clone()) {
+            Entry::Occupied(mut entry) => entry.get_mut().merge(name, new_entry)?,
+            Entry::Vacant(entry) => {
+                entry.insert(new_entry);
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&String, &CommandMapEntry)> {
+        self.0.iter()
+    }
+
+    pub(crate) fn find_command<'a>(
+        &'a self,
+        command_path: &CommandPath,
+    ) -> Option<&'a dyn Command> {
+        self.0
+            .get(command_path.name())
+            .and_then(|entry| match (&command_path, entry) {
+                (CommandPath::Command { .. }, CommandMapEntry::Command(command)) => Some(command),
+                (
+                    CommandPath::Subcommand { subcommand, .. }
+                    | CommandPath::Grouped {
+                        group: subcommand, ..
+                    },
+                    CommandMapEntry::Subcommands(subcommand_map),
+                ) => subcommand_map.0.get(subcommand).and_then(|entry| {
+                    match (&command_path, entry) {
+                        (
+                            CommandPath::Subcommand { .. },
+                            SubcommandMapEntry::Subcommand(subcommand),
+                        ) => Some(subcommand),
+                        (
+                            CommandPath::Grouped { subcommand, .. },
+                            SubcommandMapEntry::Group(subcommands),
+                        ) => subcommands.0.get(subcommand),
+                        _ => None,
+                    }
+                }),
+                _ => None,
             })
-        }
-        (SubcommandMapEntry::Subcommand(_), SubcommandMapEntry::Group(_))
-        | (SubcommandMapEntry::Group(_), SubcommandMapEntry::Subcommand(_)) => {
-            Err(CommandMapMergeError::AmbiguousSubcommand {
-                path: CommandPath::Subcommand { name, subcommand },
-            })
-        }
-        (SubcommandMapEntry::Group(group), SubcommandMapEntry::Group(new_group)) => {
-            merge_subcommand_groups(group, name, subcommand, new_group)
-        }
+            .map(|command| command.as_ref())
     }
 }
 
-fn merge_command_map_entry(
-    entry: &mut CommandMapEntry,
-    name: String,
-    new_entry: CommandMapEntry,
-) -> Result<(), CommandMapMergeError> {
-    match (entry, new_entry) {
-        (CommandMapEntry::Command(_), CommandMapEntry::Command(_)) => {
-            Err(CommandMapMergeError::DuplicateCommand {
-                path: CommandPath::Command { name },
-            })?
+impl IntoIterator for CommandMap {
+    type Item = (String, CommandMapEntry);
+    type IntoIter = <HashMap<String, CommandMapEntry> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl CommandMapEntry {
+    fn name_and_new(path: CommandPath, command: Box<dyn Command>) -> (String, Self) {
+        match path {
+            CommandPath::Command { name } => (name, Self::Command(command)),
+            CommandPath::Subcommand { name, subcommand } => (
+                name,
+                Self::Subcommands(SubcommandMap(
+                    [(subcommand, SubcommandMapEntry::Subcommand(command))].into(),
+                )),
+            ),
+            CommandPath::Grouped {
+                name,
+                group,
+                subcommand,
+            } => (
+                name,
+                Self::Subcommands(SubcommandMap(
+                    [(
+                        group,
+                        SubcommandMapEntry::Group(SubcommandGroupMap(
+                            [(subcommand, command)].into(),
+                        )),
+                    )]
+                    .into(),
+                )),
+            ),
         }
-        (CommandMapEntry::Command(_), CommandMapEntry::Subcommands(_))
-        | (CommandMapEntry::Subcommands(_), CommandMapEntry::Command(_)) => {
-            Err(CommandMapMergeError::AmbiguousSubcommand {
-                path: CommandPath::Command { name },
-            })?
-        }
-        (
-            CommandMapEntry::Subcommands(subcommand_map),
-            CommandMapEntry::Subcommands(new_subcommands),
-        ) => {
-            for (subcommand, new_entry) in new_subcommands {
-                match subcommand_map.entry(subcommand.clone()) {
-                    Entry::Occupied(mut entry) => merge_subcommand_map_entry(
-                        entry.get_mut(),
-                        name.clone(),
-                        subcommand,
-                        new_entry,
-                    )?,
-                    Entry::Vacant(entry) => {
-                        entry.insert(new_entry);
+    }
+
+    fn merge(
+        &mut self,
+        name: String,
+        new_entry: CommandMapEntry,
+    ) -> Result<(), CommandMapMergeError> {
+        match (self, new_entry) {
+            (CommandMapEntry::Command(_), CommandMapEntry::Command(_)) => {
+                Err(CommandMapMergeError::DuplicateCommand {
+                    path: CommandPath::Command { name },
+                })?
+            }
+            (CommandMapEntry::Command(_), CommandMapEntry::Subcommands(_))
+            | (CommandMapEntry::Subcommands(_), CommandMapEntry::Command(_)) => {
+                Err(CommandMapMergeError::AmbiguousSubcommand {
+                    path: CommandPath::Command { name },
+                })?
+            }
+            (
+                CommandMapEntry::Subcommands(subcommand_map),
+                CommandMapEntry::Subcommands(new_subcommands),
+            ) => {
+                for (subcommand, new_entry) in new_subcommands.0 {
+                    match subcommand_map.0.entry(subcommand.clone()) {
+                        Entry::Occupied(mut entry) => {
+                            entry.get_mut().merge(name.clone(), subcommand, new_entry)?
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(new_entry);
+                        }
                     }
                 }
             }
         }
+        Ok(())
     }
-    Ok(())
 }
 
-fn command_map_add_entry(
-    command_map: &mut HashMap<String, CommandMapEntry>,
-    name: String,
-    new_entry: CommandMapEntry,
-) -> Result<(), CommandMapMergeError> {
-    match command_map.entry(name.clone()) {
-        Entry::Occupied(mut entry) => merge_command_map_entry(entry.get_mut(), name, new_entry)?,
-        Entry::Vacant(entry) => {
-            entry.insert(new_entry);
+impl<'a> IntoIterator for &'a SubcommandMap {
+    type Item = (&'a String, &'a SubcommandMapEntry);
+    type IntoIter = <&'a HashMap<String, SubcommandMapEntry> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl SubcommandMapEntry {
+    fn merge(
+        &mut self,
+        name: String,
+        subcommand: String,
+        new_entry: SubcommandMapEntry,
+    ) -> Result<(), CommandMapMergeError> {
+        match (self, new_entry) {
+            (SubcommandMapEntry::Subcommand(_), SubcommandMapEntry::Subcommand(_)) => {
+                Err(CommandMapMergeError::DuplicateCommand {
+                    path: CommandPath::Subcommand { name, subcommand },
+                })
+            }
+            (SubcommandMapEntry::Subcommand(_), SubcommandMapEntry::Group(_))
+            | (SubcommandMapEntry::Group(_), SubcommandMapEntry::Subcommand(_)) => {
+                Err(CommandMapMergeError::AmbiguousSubcommand {
+                    path: CommandPath::Subcommand { name, subcommand },
+                })
+            }
+            (SubcommandMapEntry::Group(group), SubcommandMapEntry::Group(new_group)) => {
+                group.merge(name, subcommand, new_group)
+            }
         }
     }
-    Ok(())
 }
 
-pub(crate) fn find_command<'a>(
-    command_map: &'a CommandMap,
-    command_path: &CommandPath,
-) -> Option<&'a dyn Command> {
-    command_map
-        .get(command_path.name())
-        .and_then(|entry| match (&command_path, entry) {
-            (CommandPath::Command { .. }, CommandMapEntry::Command(command)) => Some(command),
-            (
-                CommandPath::Subcommand { subcommand, .. }
-                | CommandPath::Grouped {
-                    group: subcommand, ..
-                },
-                CommandMapEntry::Subcommands(subcommand_map),
-            ) => subcommand_map
-                .get(subcommand)
-                .and_then(|entry| match (&command_path, entry) {
-                    (
-                        CommandPath::Subcommand { .. },
-                        SubcommandMapEntry::Subcommand(subcommand),
-                    ) => Some(subcommand),
-                    (
-                        CommandPath::Grouped { subcommand, .. },
-                        SubcommandMapEntry::Group(subcommands),
-                    ) => subcommands.get(subcommand),
-                    _ => None,
-                }),
-            _ => None,
-        })
-        .map(|command| command.as_ref())
+impl SubcommandGroupMap {
+    fn merge(
+        &mut self,
+        name: String,
+        group: String,
+        new_group_commandmap: SubcommandGroupMap,
+    ) -> Result<(), CommandMapMergeError> {
+        for (subcommand, new_entry) in new_group_commandmap.0 {
+            if let Entry::Vacant(entry) = self.0.entry(subcommand.clone()) {
+                entry.insert(new_entry);
+            } else {
+                Err(CommandMapMergeError::DuplicateCommand {
+                    path: CommandPath::Grouped {
+                        name: name.clone(),
+                        group: group.clone(),
+                        subcommand,
+                    },
+                })?
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<'a> IntoIterator for &'a SubcommandGroupMap {
+    type Item = (&'a String, &'a Box<dyn Command>);
+    type IntoIter = <&'a HashMap<String, Box<dyn Command>> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
 }
 
 pub trait CommandProvider {
