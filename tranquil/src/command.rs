@@ -133,6 +133,7 @@ pub struct ModuleCommand<M: Module> {
     function: CommandFunction<M>,
     option_builders: Vec<OptionBuilder>,
     module: Arc<M>,
+    default_option: bool,
 }
 
 impl<M: Module> ModuleCommand<M> {
@@ -140,17 +141,21 @@ impl<M: Module> ModuleCommand<M> {
         function: CommandFunction<M>,
         option_builders: Vec<OptionBuilder>,
         module: Arc<M>,
+        default_option: bool,
     ) -> Self {
         Self {
             function,
             option_builders,
             module,
+            default_option,
         }
     }
 }
 
 #[async_trait]
 pub trait Command: Send + Sync {
+    fn is_default_option(&self) -> bool;
+
     fn add_options(
         &self,
         translated_commands: &TranslatedCommands,
@@ -174,6 +179,10 @@ impl Debug for dyn Command {
 
 #[async_trait]
 impl<M: Module> Command for ModuleCommand<M> {
+    fn is_default_option(&self) -> bool {
+        self.default_option
+    }
+
     fn add_options(
         &self,
         translated_commands: &TranslatedCommands,

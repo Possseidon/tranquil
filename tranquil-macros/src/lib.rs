@@ -22,7 +22,8 @@ enum CommandPath {
 }
 
 #[derive(Default)]
-struct Attributes {
+struct Attributes<'a> {
+    default: Option<&'a Ident>,
     rename: Option<CommandPath>,
 }
 
@@ -102,6 +103,7 @@ fn invalid_attribute(span: &impl Spanned) -> TokenStream {
         span.span(),
         indoc! {r#"
             available attributes are
+                `default`
                 `rename = "..."`
         "#},
     )
@@ -117,6 +119,12 @@ fn invalid_rename_literal(span: &impl Spanned) -> TokenStream {
 
 fn multiple_renames(span: &impl Spanned) -> TokenStream {
     syn::Error::new(span.span(), "only one rename can be applied")
+        .into_compile_error()
+        .into()
+}
+
+fn default_on_base_command(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(span.span(), "only subcommands can be `default`")
         .into_compile_error()
         .into()
 }
@@ -156,6 +164,14 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                         errors.push(invalid_attribute(&nested_meta));
                     }
                 }
+                NestedMeta::Meta(Meta::Path(path)) => {
+                    let ident = path.get_ident();
+                    if ident.map_or(false, |ident| ident == "default") {
+                        attributes.default = ident;
+                    } else {
+                        errors.push(invalid_attribute(&nested_meta));
+                    }
+                }
                 _ => {
                     errors.push(invalid_attribute(&nested_meta));
                 }
@@ -173,6 +189,10 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                 name: name.to_string(),
             }
         });
+
+    if let (Some(ident), CommandPath::Command { .. }) = (attributes.default, &command_path) {
+        errors.push(default_on_base_command(&ident));
+    }
 
     let typed_parameters = item_fn
         .sig
@@ -254,6 +274,8 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     });
 
+    let is_default_option = attributes.default.is_some();
+
     let mut result = TokenStream::from(quote! {
         #item_fn
 
@@ -275,6 +297,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                     }),
                     ::std::vec![#(#command_options),*],
                     self,
+                    #is_default_option,
                 )),
             )
         }

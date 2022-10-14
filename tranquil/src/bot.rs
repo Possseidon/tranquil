@@ -134,7 +134,9 @@ impl Bot {
 
                                 match entry {
                                     SubcommandMapEntry::Subcommand(command) => {
-                                        option.kind(CommandOptionType::SubCommand);
+                                        option
+                                            .kind(CommandOptionType::SubCommand)
+                                            .default_option(command.is_default_option());
 
                                         command.add_suboptions(&self.translated_commands, option);
                                     }
@@ -152,7 +154,9 @@ impl Bot {
                                                     option,
                                                 );
 
-                                                option.kind(CommandOptionType::SubCommand);
+                                                option
+                                                    .kind(CommandOptionType::SubCommand)
+                                                    .default_option(command.is_default_option());
 
                                                 command.add_suboptions(
                                                     &self.translated_commands,
