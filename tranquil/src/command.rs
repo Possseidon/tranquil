@@ -9,13 +9,20 @@ use std::{
 use futures::Future;
 use serenity::{
     async_trait,
-    builder::{CreateApplicationCommand, CreateApplicationCommandOption},
+    builder::{
+        CreateApplicationCommand, CreateApplicationCommandOption, CreateInteractionResponse,
+        CreateInteractionResponseFollowup, EditInteractionResponse,
+    },
     client::Context,
-    model::application::{
-        command::CommandOptionType,
-        interaction::application_command::{
-            ApplicationCommandInteraction, CommandData, CommandDataOption,
+    model::{
+        application::{
+            command::CommandOptionType,
+            interaction::application_command::{
+                ApplicationCommandInteraction, CommandData, CommandDataOption,
+            },
         },
+        channel::Message,
+        id::MessageId,
     },
 };
 
@@ -262,6 +269,87 @@ impl Display for CommandMapMergeError {
 pub struct CommandContext {
     pub ctx: Context,
     pub interaction: ApplicationCommandInteraction,
+}
+
+impl CommandContext {
+    pub async fn get_interaction_response(&self) -> serenity::Result<Message> {
+        self.interaction
+            .get_interaction_response(&self.ctx.http)
+            .await
+    }
+
+    pub async fn create_interaction_response<'a, F>(&self, f: F) -> serenity::Result<()>
+    where
+        for<'b> F:
+            FnOnce(&'b mut CreateInteractionResponse<'a>) -> &'b mut CreateInteractionResponse<'a>,
+    {
+        self.interaction
+            .create_interaction_response(&self.ctx.http, f)
+            .await
+    }
+
+    pub async fn edit_original_interaction_response<F>(&self, f: F) -> serenity::Result<Message>
+    where
+        F: FnOnce(&mut EditInteractionResponse) -> &mut EditInteractionResponse,
+    {
+        self.interaction
+            .edit_original_interaction_response(&self.ctx.http, f)
+            .await
+    }
+
+    pub async fn delete_original_interaction_response(&self) -> serenity::Result<()> {
+        self.interaction
+            .delete_original_interaction_response(&self.ctx.http)
+            .await
+    }
+
+    pub async fn create_followup_message<'a, F>(&self, f: F) -> serenity::Result<Message>
+    where
+        for<'b> F: FnOnce(
+            &'b mut CreateInteractionResponseFollowup<'a>,
+        ) -> &'b mut CreateInteractionResponseFollowup<'a>,
+    {
+        self.interaction
+            .create_followup_message(&self.ctx.http, f)
+            .await
+    }
+
+    pub async fn edit_followup_message<'a, F, M: Into<MessageId>>(
+        &self,
+        message_id: M,
+        f: F,
+    ) -> serenity::Result<Message>
+    where
+        for<'b> F: FnOnce(
+            &'b mut CreateInteractionResponseFollowup<'a>,
+        ) -> &'b mut CreateInteractionResponseFollowup<'a>,
+    {
+        self.interaction
+            .edit_followup_message(&self.ctx.http, message_id, f)
+            .await
+    }
+
+    pub async fn delete_followup_message<M: Into<MessageId>>(
+        &self,
+        message_id: M,
+    ) -> serenity::Result<()> {
+        self.interaction
+            .delete_followup_message(&self.ctx.http, message_id)
+            .await
+    }
+
+    pub async fn get_followup_message<M: Into<MessageId>>(
+        &self,
+        message_id: M,
+    ) -> serenity::Result<Message> {
+        self.interaction
+            .get_followup_message(&self.ctx.http, message_id)
+            .await
+    }
+
+    pub async fn defer(&self) -> serenity::Result<()> {
+        self.interaction.defer(&self.ctx.http).await
+    }
 }
 
 #[derive(Debug, Default)]
