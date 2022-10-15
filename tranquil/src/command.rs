@@ -24,7 +24,12 @@ use serenity::{
     },
 };
 
-use crate::{l10n::TranslatedCommands, module::Module, AnyResult};
+use crate::{
+    autocomplete::{AutocompleteContext, AutocompleteFunction},
+    l10n::TranslatedCommands,
+    module::Module,
+    AnyResult,
+};
 
 pub struct CommandContext {
     pub bot: Context,
@@ -32,11 +37,11 @@ pub struct CommandContext {
 }
 
 impl CommandContext {
-    pub async fn get_interaction_response(&self) -> serenity::Result<Message> {
+    pub async fn get_response(&self) -> serenity::Result<Message> {
         self.interaction.get_interaction_response(&self.bot).await
     }
 
-    pub async fn create_interaction_response<'a, F>(&self, f: F) -> serenity::Result<()>
+    pub async fn create_response<'a, F>(&self, f: F) -> serenity::Result<()>
     where
         for<'b> F:
             FnOnce(&'b mut CreateInteractionResponse<'a>) -> &'b mut CreateInteractionResponse<'a>,
@@ -46,7 +51,7 @@ impl CommandContext {
             .await
     }
 
-    pub async fn edit_original_interaction_response<F>(&self, f: F) -> serenity::Result<Message>
+    pub async fn edit_original_response<F>(&self, f: F) -> serenity::Result<Message>
     where
         F: FnOnce(&mut EditInteractionResponse) -> &mut EditInteractionResponse,
     {
@@ -55,7 +60,7 @@ impl CommandContext {
             .await
     }
 
-    pub async fn delete_original_interaction_response(&self) -> serenity::Result<()> {
+    pub async fn delete_original_response(&self) -> serenity::Result<()> {
         self.interaction
             .delete_original_interaction_response(&self.bot)
             .await
@@ -184,7 +189,8 @@ pub type OptionBuilder = fn(&TranslatedCommands) -> CreateApplicationCommandOpti
 
 pub struct ModuleCommand<M: Module> {
     module: Arc<M>,
-    function: CommandFunction<M>,
+    command_function: CommandFunction<M>,
+    autocomplete_function: Option<AutocompleteFunction<M>>,
     option_builders: Vec<OptionBuilder>,
     default_option: bool,
 }
@@ -192,13 +198,15 @@ pub struct ModuleCommand<M: Module> {
 impl<M: Module> ModuleCommand<M> {
     pub fn new(
         module: Arc<M>,
-        function: CommandFunction<M>,
+        command_function: CommandFunction<M>,
+        autocomplete_function: Option<AutocompleteFunction<M>>,
         option_builders: Vec<OptionBuilder>,
         default_option: bool,
     ) -> Self {
         Self {
             module,
-            function,
+            command_function,
+            autocomplete_function,
             option_builders,
             default_option,
         }
@@ -222,6 +230,8 @@ pub trait Command: Send + Sync {
     );
 
     async fn run(&self, ctx: CommandContext) -> AnyResult<()>;
+
+    async fn autocomplete(&self, ctx: AutocompleteContext) -> AnyResult<()>;
 }
 
 impl Debug for dyn Command {
@@ -257,7 +267,7 @@ impl<M: Module> Command for ModuleCommand<M> {
     }
 
     async fn run(&self, ctx: CommandContext) -> AnyResult<()> {
-        (self.function)(self.module.clone(), ctx).await
+        (self.command_function)(self.module.clone(), ctx).await
         // TODO: return a different type of error so e.g. invalid parameters can automatically be reported nicely like here:
 
         /*
@@ -288,6 +298,14 @@ impl<M: Module> Command for ModuleCommand<M> {
             }
         }
         */
+    }
+
+    async fn autocomplete(&self, ctx: AutocompleteContext) -> AnyResult<()> {
+        if let Some(autocomplete_function) = &self.autocomplete_function {
+            autocomplete_function(self.module.clone(), ctx).await
+        } else {
+            Err("no autocomplete handler")?
+        }
     }
 }
 
