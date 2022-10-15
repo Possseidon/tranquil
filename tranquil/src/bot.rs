@@ -27,6 +27,7 @@ use serenity::{
 };
 
 use crate::{
+    autocomplete::AutocompleteContext,
     command::{
         CommandContext, CommandMap, CommandMapEntry, CommandMapMergeError, CommandPath,
         SubcommandMapEntry,
@@ -341,9 +342,7 @@ impl EventHandler for Bot {
             match interaction {
                 Interaction::ApplicationCommand(interaction) => {
                     let command_path = CommandPath::resolve(&interaction.data);
-                    let command = self.command_map.find_command(&command_path);
-
-                    match command {
+                    match self.command_map.find_command(&command_path) {
                         Some(command) => command.run(CommandContext { bot, interaction }).await?,
                         None => {
                             interaction
@@ -359,14 +358,25 @@ impl EventHandler for Bot {
                                         .ephemeral(true)
                                     })
                                 })
-                                .await?
+                                .await?;
                         }
                     }
                 }
                 Interaction::Autocomplete(interaction) => {
-                    interaction
-                        .create_autocomplete_response(bot, |response| response)
-                        .await?
+                    let command_path = CommandPath::resolve(&interaction.data);
+                    match self.command_map.find_command(&command_path) {
+                        Some(command) => {
+                            command
+                                .autocomplete(AutocompleteContext { bot, interaction })
+                                .await?;
+                        }
+                        None => {
+                            // Commands are probably outdated... Send an empty autocomplete response.
+                            interaction
+                                .create_autocomplete_response(bot, |response| response)
+                                .await?;
+                        }
+                    }
                 }
                 _ => {}
             }

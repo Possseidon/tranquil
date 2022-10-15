@@ -1,10 +1,14 @@
+pub mod autocomplete;
 pub mod bot;
 pub mod command;
 pub mod l10n;
 pub mod module;
 pub mod resolve;
 
-pub use tranquil_macros::*;
+pub mod macros {
+    pub use tranquil_macros::*;
+}
+
 extern crate self as tranquil;
 
 pub use serenity;

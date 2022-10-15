@@ -2,8 +2,8 @@ use indoc::indoc;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    parse_macro_input, spanned::Spanned, AttributeArgs, FnArg, Ident, ImplItem, ItemFn, ItemImpl,
-    Lit, LitStr, Meta, MetaNameValue, NestedMeta, PatType,
+    parse::Parse, parse_macro_input, spanned::Spanned, AttributeArgs, FnArg, Ident, ImplItem,
+    ItemFn, ItemImpl, Lit, LitStr, Meta, MetaNameValue, NestedMeta, PatType,
 };
 
 enum CommandPath {
@@ -21,10 +21,16 @@ enum CommandPath {
     },
 }
 
+enum Autocomplete {
+    DefaultName,
+    CustomName(Ident),
+}
+
 #[derive(Default)]
 struct SlashAttributes<'a> {
     default: Option<&'a Ident>,
     rename: Option<CommandPath>,
+    autocomplete: Option<Autocomplete>,
 }
 
 trait CommandString: Spanned {
@@ -112,7 +118,7 @@ fn invalid_attribute(span: &impl Spanned) -> TokenStream {
 }
 
 fn invalid_rename_literal(span: &impl Spanned) -> TokenStream {
-    syn::Error::new(span.span(), "string expected")
+    syn::Error::new(span.span(), "expected string")
         .into_compile_error()
         .into()
 }
@@ -125,6 +131,21 @@ fn multiple_renames(span: &impl Spanned) -> TokenStream {
 
 fn default_on_base_command(span: &impl Spanned) -> TokenStream {
     syn::Error::new(span.span(), "only subcommands can be `default`")
+        .into_compile_error()
+        .into()
+}
+
+fn multiple_autocompletes(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(
+        span.span(),
+        "only one autocomplete function can be specified",
+    )
+    .into_compile_error()
+    .into()
+}
+
+fn invalid_autocomplete_ident(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(span.span(), "expected identifier")
         .into_compile_error()
         .into()
 }
@@ -160,6 +181,23 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
                             _ => errors.push(invalid_rename_literal(&lit)),
                         }
+                    } else if ident.map_or(false, |ident| ident == "autocomplete") {
+                        match lit {
+                            Lit::Str(lit_str) => {
+                                if attributes.autocomplete.is_some() {
+                                    errors.push(multiple_autocompletes(&nested_meta));
+                                } else {
+                                    match lit_str.parse_with(syn::Ident::parse) {
+                                        Ok(ident) => {
+                                            attributes.autocomplete =
+                                                Some(Autocomplete::CustomName(ident))
+                                        }
+                                        Err(_) => errors.push(invalid_autocomplete_ident(&lit)),
+                                    }
+                                }
+                            }
+                            _ => errors.push(invalid_autocomplete_ident(&lit)),
+                        }
                     } else {
                         errors.push(invalid_attribute(&nested_meta));
                     }
@@ -168,6 +206,8 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                     let ident = path.get_ident();
                     if ident.map_or(false, |ident| ident == "default") {
                         attributes.default = ident;
+                    } else if ident.map_or(false, |ident| ident == "autocomplete") {
+                        attributes.autocomplete = Some(Autocomplete::DefaultName);
                     } else {
                         errors.push(invalid_attribute(&nested_meta));
                     }
@@ -208,12 +248,30 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let parameter_resolvers = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
         quote! {
-            let #pat = <#ty as ::tranquil::resolve::Resolve>::resolve(
+            let (#pat, _) = <#ty as ::tranquil::resolve::Resolve>::resolve(
                 ::std::stringify!(#pat),
                 options.clone(),
             )?;
         }
     });
+
+    let autocompleter = if let Some(autocomplete) = attributes.autocomplete {
+        let autocompleter_name = match autocomplete {
+            Autocomplete::DefaultName => format_ident!("autocomplete_{name}"),
+            Autocomplete::CustomName(name) => format_ident!("{name}"),
+        };
+        quote! {
+            Some(
+                ::std::boxed::Box::new(|module, ctx| {
+                    ::std::boxed::Box::pin(async move {
+                        module.#autocompleter_name(ctx).await
+                    })
+                })
+            )
+        }
+    } else {
+        quote! { None }
+    };
 
     let make_command_path = |reference| {
         let command_path_or_ref = if reference {
@@ -293,6 +351,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                             module.#impl_name(ctx, #(#parameters),*).await
                         })
                     }),
+                    #autocompleter,
                     ::std::vec![#(#command_options),*],
                     #is_default_option,
                 )),
@@ -304,7 +363,66 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
+pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
+    // TODO: Deduplicate code
+
+    let mut errors = vec![];
+
+    let nested_metas = parse_macro_input!(attr as AttributeArgs);
+
+    if let Some(meta) = nested_metas.first() {
+        errors.push(TokenStream::from(
+            syn::Error::new(meta.span(), "autocomplete does not support any parameters")
+                .to_compile_error(),
+        ))
+    }
+
+    let mut item_fn = parse_macro_input!(item as ItemFn);
+    let name = item_fn.sig.ident;
+    let impl_name = format_ident!("__{name}");
+    item_fn.sig.ident = impl_name.clone();
+
+    let typed_parameters = item_fn
+        .sig
+        .inputs
+        .iter()
+        .skip(2) // TODO: Don't just skip &self and AutocompleteContext.
+        .filter_map(|input| match input {
+            FnArg::Receiver(_) => None,
+            FnArg::Typed(pat_type) => Some(pat_type),
+        });
+
+    let parameters = typed_parameters.clone().map(|PatType { pat, .. }| pat);
+
+    let parameter_resolvers = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
+        quote! {
+            let (#pat, _) = <#ty as ::tranquil::resolve::Resolve>::resolve(
+                ::std::stringify!(#pat),
+                options.clone(),
+            )?;
+        }
+    });
+
+    let mut result = TokenStream::from(quote! {
+        #item_fn
+
+        async fn #name(
+            &self,
+            ctx: ::tranquil::autocomplete::AutocompleteContext,
+        ) -> ::tranquil::AnyResult<()> {
+            let options = ::tranquil::resolve::resolve_command_options(&ctx.interaction.data).iter();
+            #(#parameter_resolvers)*
+            self.#impl_name(ctx, #(#parameters),*).await
+        }
+    });
+    result.extend(errors);
+    result
+}
+
+#[proc_macro_attribute]
 pub fn command_provider(attr: TokenStream, item: TokenStream) -> TokenStream {
+    // TODO: Deduplicate code
+
     let nested_metas = parse_macro_input!(attr as AttributeArgs);
 
     let mut errors = vec![];
