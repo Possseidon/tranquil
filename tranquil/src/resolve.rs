@@ -5,7 +5,9 @@ use serenity::{
     model::{
         application::{
             command::CommandOptionType,
-            interaction::application_command::{CommandDataOption, CommandDataOptionValue},
+            interaction::application_command::{
+                CommandData, CommandDataOption, CommandDataOptionValue,
+            },
         },
         channel::{Attachment, PartialChannel},
         guild::{PartialMember, Role},
@@ -413,4 +415,21 @@ macro_rules! bounded_string {
             ::std::option::Option::Some($crate::bounded_string!(@inner($max))),
         ));
     };
+}
+
+pub fn resolve_command_options(command_data: &CommandData) -> &[CommandDataOption] {
+    match command_data.options.as_slice() {
+        [group]
+            if group.kind == CommandOptionType::SubCommand
+                || group.kind == CommandOptionType::SubCommandGroup =>
+        {
+            match group.options.as_slice() {
+                [subcommand] if subcommand.kind == CommandOptionType::SubCommand => {
+                    &subcommand.options
+                }
+                _ => &group.options,
+            }
+        }
+        _ => &command_data.options,
+    }
 }

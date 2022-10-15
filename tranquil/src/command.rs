@@ -17,9 +17,7 @@ use serenity::{
     model::{
         application::{
             command::CommandOptionType,
-            interaction::application_command::{
-                ApplicationCommandInteraction, CommandData, CommandDataOption,
-            },
+            interaction::application_command::{ApplicationCommandInteraction, CommandData},
         },
         channel::Message,
         id::MessageId,
@@ -28,15 +26,87 @@ use serenity::{
 
 use crate::{l10n::TranslatedCommands, module::Module, AnyResult};
 
-type CommandFunction<M> = Box<
-    dyn Fn(
-            Context,
-            ApplicationCommandInteraction,
-            Arc<M>,
-        ) -> Pin<Box<dyn Future<Output = AnyResult<()>> + Send + Sync>>
-        + Send
-        + Sync,
->;
+pub struct CommandContext {
+    pub bot: Context,
+    pub interaction: ApplicationCommandInteraction,
+}
+
+impl CommandContext {
+    pub async fn get_interaction_response(&self) -> serenity::Result<Message> {
+        self.interaction.get_interaction_response(&self.bot).await
+    }
+
+    pub async fn create_interaction_response<'a, F>(&self, f: F) -> serenity::Result<()>
+    where
+        for<'b> F:
+            FnOnce(&'b mut CreateInteractionResponse<'a>) -> &'b mut CreateInteractionResponse<'a>,
+    {
+        self.interaction
+            .create_interaction_response(&self.bot, f)
+            .await
+    }
+
+    pub async fn edit_original_interaction_response<F>(&self, f: F) -> serenity::Result<Message>
+    where
+        F: FnOnce(&mut EditInteractionResponse) -> &mut EditInteractionResponse,
+    {
+        self.interaction
+            .edit_original_interaction_response(&self.bot, f)
+            .await
+    }
+
+    pub async fn delete_original_interaction_response(&self) -> serenity::Result<()> {
+        self.interaction
+            .delete_original_interaction_response(&self.bot)
+            .await
+    }
+
+    pub async fn create_followup_message<'a, F>(&self, f: F) -> serenity::Result<Message>
+    where
+        for<'b> F: FnOnce(
+            &'b mut CreateInteractionResponseFollowup<'a>,
+        ) -> &'b mut CreateInteractionResponseFollowup<'a>,
+    {
+        self.interaction.create_followup_message(&self.bot, f).await
+    }
+
+    pub async fn edit_followup_message<'a, F, M: Into<MessageId>>(
+        &self,
+        message_id: M,
+        f: F,
+    ) -> serenity::Result<Message>
+    where
+        for<'b> F: FnOnce(
+            &'b mut CreateInteractionResponseFollowup<'a>,
+        ) -> &'b mut CreateInteractionResponseFollowup<'a>,
+    {
+        self.interaction
+            .edit_followup_message(&self.bot, message_id, f)
+            .await
+    }
+
+    pub async fn delete_followup_message<M: Into<MessageId>>(
+        &self,
+        message_id: M,
+    ) -> serenity::Result<()> {
+        self.interaction
+            .delete_followup_message(&self.bot, message_id)
+            .await
+    }
+
+    pub async fn get_followup_message<M: Into<MessageId>>(
+        &self,
+        message_id: M,
+    ) -> serenity::Result<Message> {
+        self.interaction
+            .get_followup_message(&self.bot, message_id)
+            .await
+    }
+
+    pub async fn defer(&self) -> serenity::Result<()> {
+        self.interaction.defer(&self.bot).await
+    }
+}
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CommandPath {
@@ -62,20 +132,7 @@ impl CommandPath {
             | CommandPath::Grouped { name, .. } => name,
         }
     }
-}
 
-#[derive(Debug)]
-pub struct InvalidCommandData;
-
-impl Display for InvalidCommandData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "invalid command data")
-    }
-}
-
-impl Error for InvalidCommandData {}
-
-impl CommandPath {
     pub(crate) fn resolve(command_data: &CommandData) -> CommandPath {
         match command_data.options.as_slice() {
             [group]
@@ -103,23 +160,6 @@ impl CommandPath {
     }
 }
 
-pub fn resolve_command_options(command_data: &CommandData) -> &[CommandDataOption] {
-    match command_data.options.as_slice() {
-        [group]
-            if group.kind == CommandOptionType::SubCommand
-                || group.kind == CommandOptionType::SubCommandGroup =>
-        {
-            match group.options.as_slice() {
-                [subcommand] if subcommand.kind == CommandOptionType::SubCommand => {
-                    &subcommand.options
-                }
-                _ => &group.options,
-            }
-        }
-        _ => &command_data.options,
-    }
-}
-
 impl Display for CommandPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -134,26 +174,32 @@ impl Display for CommandPath {
     }
 }
 
+type CommandFunction<M> = Box<
+    dyn Fn(Arc<M>, CommandContext) -> Pin<Box<dyn Future<Output = AnyResult<()>> + Send + Sync>>
+        + Send
+        + Sync,
+>;
+
 pub type OptionBuilder = fn(&TranslatedCommands) -> CreateApplicationCommandOption;
 
 pub struct ModuleCommand<M: Module> {
+    module: Arc<M>,
     function: CommandFunction<M>,
     option_builders: Vec<OptionBuilder>,
-    module: Arc<M>,
     default_option: bool,
 }
 
 impl<M: Module> ModuleCommand<M> {
     pub fn new(
+        module: Arc<M>,
         function: CommandFunction<M>,
         option_builders: Vec<OptionBuilder>,
-        module: Arc<M>,
         default_option: bool,
     ) -> Self {
         Self {
+            module,
             function,
             option_builders,
-            module,
             default_option,
         }
     }
@@ -175,7 +221,7 @@ pub trait Command: Send + Sync {
         option: &mut CreateApplicationCommandOption,
     );
 
-    async fn run(&self, ctx: Context, interaction: ApplicationCommandInteraction) -> AnyResult<()>;
+    async fn run(&self, ctx: CommandContext) -> AnyResult<()>;
 }
 
 impl Debug for dyn Command {
@@ -210,8 +256,8 @@ impl<M: Module> Command for ModuleCommand<M> {
         }
     }
 
-    async fn run(&self, ctx: Context, interaction: ApplicationCommandInteraction) -> AnyResult<()> {
-        (self.function)(ctx, interaction, self.module.clone()).await
+    async fn run(&self, ctx: CommandContext) -> AnyResult<()> {
+        (self.function)(self.module.clone(), ctx).await
         // TODO: return a different type of error so e.g. invalid parameters can automatically be reported nicely like here:
 
         /*
@@ -263,92 +309,6 @@ impl Display for CommandMapMergeError {
                 write!(f, "command `/{path}` cannot also have subcommands")
             }
         }
-    }
-}
-
-pub struct CommandContext {
-    pub ctx: Context,
-    pub interaction: ApplicationCommandInteraction,
-}
-
-impl CommandContext {
-    pub async fn get_interaction_response(&self) -> serenity::Result<Message> {
-        self.interaction
-            .get_interaction_response(&self.ctx.http)
-            .await
-    }
-
-    pub async fn create_interaction_response<'a, F>(&self, f: F) -> serenity::Result<()>
-    where
-        for<'b> F:
-            FnOnce(&'b mut CreateInteractionResponse<'a>) -> &'b mut CreateInteractionResponse<'a>,
-    {
-        self.interaction
-            .create_interaction_response(&self.ctx.http, f)
-            .await
-    }
-
-    pub async fn edit_original_interaction_response<F>(&self, f: F) -> serenity::Result<Message>
-    where
-        F: FnOnce(&mut EditInteractionResponse) -> &mut EditInteractionResponse,
-    {
-        self.interaction
-            .edit_original_interaction_response(&self.ctx.http, f)
-            .await
-    }
-
-    pub async fn delete_original_interaction_response(&self) -> serenity::Result<()> {
-        self.interaction
-            .delete_original_interaction_response(&self.ctx.http)
-            .await
-    }
-
-    pub async fn create_followup_message<'a, F>(&self, f: F) -> serenity::Result<Message>
-    where
-        for<'b> F: FnOnce(
-            &'b mut CreateInteractionResponseFollowup<'a>,
-        ) -> &'b mut CreateInteractionResponseFollowup<'a>,
-    {
-        self.interaction
-            .create_followup_message(&self.ctx.http, f)
-            .await
-    }
-
-    pub async fn edit_followup_message<'a, F, M: Into<MessageId>>(
-        &self,
-        message_id: M,
-        f: F,
-    ) -> serenity::Result<Message>
-    where
-        for<'b> F: FnOnce(
-            &'b mut CreateInteractionResponseFollowup<'a>,
-        ) -> &'b mut CreateInteractionResponseFollowup<'a>,
-    {
-        self.interaction
-            .edit_followup_message(&self.ctx.http, message_id, f)
-            .await
-    }
-
-    pub async fn delete_followup_message<M: Into<MessageId>>(
-        &self,
-        message_id: M,
-    ) -> serenity::Result<()> {
-        self.interaction
-            .delete_followup_message(&self.ctx.http, message_id)
-            .await
-    }
-
-    pub async fn get_followup_message<M: Into<MessageId>>(
-        &self,
-        message_id: M,
-    ) -> serenity::Result<Message> {
-        self.interaction
-            .get_followup_message(&self.ctx.http, message_id)
-            .await
-    }
-
-    pub async fn defer(&self) -> serenity::Result<()> {
-        self.interaction.defer(&self.ctx.http).await
     }
 }
 
