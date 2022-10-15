@@ -248,9 +248,8 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let parameter_resolvers = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
         quote! {
-            let (#pat, _) = <#ty as ::tranquil::resolve::Resolve>::resolve(
-                ::std::stringify!(#pat),
-                options.clone(),
+            let #pat = <#ty as ::tranquil::resolve::Resolve>::resolve(
+                ::tranquil::resolve::find_option(::std::stringify!(#pat), options.clone())
             )?;
         }
     });
@@ -396,9 +395,8 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let parameter_resolvers = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
         quote! {
-            let (#pat, _) = <#ty as ::tranquil::resolve::Resolve>::resolve(
-                ::std::stringify!(#pat),
-                options.clone(),
+            let #pat = <#ty as ::tranquil::resolve::Resolve>::resolve(
+                ::tranquil::resolve::find_option(::std::stringify!(#pat), options.clone())
             )?;
         }
     });

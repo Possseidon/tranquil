@@ -48,25 +48,17 @@ impl fmt::Display for ResolveError {
     }
 }
 
-fn find_option<'a>(
+pub fn find_option<'a>(
     name: &str,
     mut options: impl Iterator<Item = &'a CommandDataOption>,
-) -> ResolveResult<&'a CommandDataOption> {
-    options
-        .find(|option| option.name == name)
-        .ok_or(ResolveError::Missing)
+) -> Option<&'a CommandDataOption> {
+    options.find(|option| option.name == name)
 }
 
-fn resolve_option(option: &CommandDataOption) -> ResolveResult<&CommandDataOptionValue> {
-    option.resolved.as_ref().ok_or(ResolveError::Unresolvable)
-}
-
-fn find_and_resolve_option<'a>(
-    name: &str,
-    options: impl Iterator<Item = &'a CommandDataOption>,
-) -> ResolveResult<(&'a CommandDataOptionValue, &'a CommandDataOption)> {
-    let option = find_option(name, options)?;
-    Ok((resolve_option(option)?, option))
+fn resolve_option(option: Option<&CommandDataOption>) -> ResolveResult<&CommandDataOptionValue> {
+    option.map_or(Err(ResolveError::Missing), |option| {
+        option.resolved.as_ref().ok_or(ResolveError::Unresolvable)
+    })
 }
 
 pub trait Resolve: Sized {
@@ -75,10 +67,7 @@ pub trait Resolve: Sized {
 
     fn describe(_option: &mut CreateApplicationCommandOption) {}
 
-    fn resolve<'a>(
-        name: &str,
-        options: impl Iterator<Item = &'a CommandDataOption>,
-    ) -> ResolveResult<(Self, Option<&'a CommandDataOption>)>;
+    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self>;
 }
 
 impl<T: Resolve> Resolve for Option<T> {
@@ -89,16 +78,11 @@ impl<T: Resolve> Resolve for Option<T> {
         T::describe(option);
     }
 
-    fn resolve<'a>(
-        name: &str,
-        options: impl Iterator<Item = &'a CommandDataOption>,
-    ) -> ResolveResult<(Self, Option<&'a CommandDataOption>)> {
-        T::resolve(name, options)
-            .map(|(value, option)| (Some(value), option))
-            .or_else(|error| match error {
-                ResolveError::Missing => Ok((None, None)),
-                error => Err(error),
-            })
+    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+        Ok(match option {
+            Some(_) => Some(T::resolve(option)?),
+            None => None,
+        })
     }
 }
 
@@ -107,14 +91,11 @@ macro_rules! impl_resolve {
         impl Resolve for $t {
             const KIND: CommandOptionType = CommandOptionType::$command_option_type;
 
-            fn resolve<'a>(
-                name: &str,
-                options: impl Iterator<Item = &'a CommandDataOption>,
-            ) -> ResolveResult<(Self, Option<&'a CommandDataOption>)> {
-                find_and_resolve_option(name, options).and_then(|(value, option)| match value {
-                    CommandDataOptionValue::$command_option_type(value) => Ok((value.clone(), Some(option))),
+            fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+                match resolve_option(option)? {
+                    CommandDataOptionValue::$command_option_type(value) => Ok(value.clone()),
                     _ => Err(ResolveError::InvalidType),
-                })
+                }
             }
         }
     )* };
@@ -140,18 +121,13 @@ macro_rules! impl_resolve_for_integer {
                 i64::try_from(<$t>::MAX).ok().map(|max| option.max_int_value(max));
             }
 
-            fn resolve<'a>(
-                name: &str,
-                options: impl Iterator<Item = &'a CommandDataOption>,
-            ) -> ResolveResult<(Self, Option<&'a CommandDataOption>)> {
-                find_and_resolve_option(name, options).and_then(|(value, option)| match *value {
+            fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+                match resolve_option(option)? {
                     CommandDataOptionValue::Integer(value) => {
-                        <$t>::try_from(value)
-                            .map(|value| (value, Some(option)))
-                            .map_err(|error| ResolveError::Other(error.into()))
+                        <$t>::try_from(*value).map_err(|error| ResolveError::Other(error.into()))
                     }
                     _ => Err(ResolveError::InvalidType),
-                })
+                }
             }
         }
     )* };
@@ -162,43 +138,34 @@ impl_resolve_for_integer!(i8, i16, i32, i128, isize, u8, u16, u32, u64, u128, us
 impl Resolve for f32 {
     const KIND: CommandOptionType = CommandOptionType::Number;
 
-    fn resolve<'a>(
-        name: &str,
-        options: impl Iterator<Item = &'a CommandDataOption>,
-    ) -> ResolveResult<(Self, Option<&'a CommandDataOption>)> {
-        find_and_resolve_option(name, options).and_then(|(value, option)| match value {
-            CommandDataOptionValue::Number(value) => Ok((*value as _, Some(option))),
+    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+        match resolve_option(option)? {
+            CommandDataOptionValue::Number(value) => Ok(*value as _),
             _ => Err(ResolveError::InvalidType),
-        })
+        }
     }
 }
 
 impl Resolve for User {
     const KIND: CommandOptionType = CommandOptionType::User;
 
-    fn resolve<'a>(
-        name: &str,
-        options: impl Iterator<Item = &'a CommandDataOption>,
-    ) -> ResolveResult<(Self, Option<&'a CommandDataOption>)> {
-        find_and_resolve_option(name, options).and_then(|(value, option)| match value {
-            CommandDataOptionValue::User(value, _) => Ok((value.clone(), Some(option))),
+    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+        match resolve_option(option)? {
+            CommandDataOptionValue::User(value, _) => Ok(value.clone()),
             _ => Err(ResolveError::InvalidType),
-        })
+        }
     }
 }
 
 impl Resolve for PartialMember {
     const KIND: CommandOptionType = CommandOptionType::User;
 
-    fn resolve<'a>(
-        name: &str,
-        options: impl Iterator<Item = &'a CommandDataOption>,
-    ) -> ResolveResult<(Self, Option<&'a CommandDataOption>)> {
-        find_and_resolve_option(name, options).and_then(|(value, option)| match value {
-            CommandDataOptionValue::User(_, Some(value)) => Ok((value.clone(), Some(option))),
+    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+        match resolve_option(option)? {
+            CommandDataOptionValue::User(_, Some(value)) => Ok(value.clone()),
             CommandDataOptionValue::User(_, None) => Err(ResolveError::NoPartialMemberData),
             _ => Err(ResolveError::InvalidType),
-        })
+        }
     }
 }
 
@@ -211,20 +178,14 @@ pub enum Mentionable {
 impl Resolve for Mentionable {
     const KIND: CommandOptionType = CommandOptionType::Mentionable;
 
-    fn resolve<'a>(
-        name: &str,
-        options: impl Iterator<Item = &'a CommandDataOption>,
-    ) -> ResolveResult<(Self, Option<&'a CommandDataOption>)> {
-        find_and_resolve_option(name, options).and_then(|(value, option)| match value {
-            CommandDataOptionValue::User(user, partial_member) => Ok((
-                Mentionable::User(user.clone(), partial_member.clone()),
-                Some(option),
-            )),
-            CommandDataOptionValue::Role(role) => {
-                Ok((Mentionable::Role(role.clone()), Some(option)))
+    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+        match resolve_option(option)? {
+            CommandDataOptionValue::User(user, partial_member) => {
+                Ok(Mentionable::User(user.clone(), partial_member.clone()))
             }
+            CommandDataOptionValue::Role(role) => Ok(Mentionable::Role(role.clone())),
             _ => Err(ResolveError::InvalidType),
-        })
+        }
     }
 }
 
@@ -238,19 +199,14 @@ macro_rules! impl_resolve_for_bounded_integer {
                 i64::try_from(MAX).ok().map(|max| option.max_int_value(max));
             }
 
-            fn resolve<'a>(
-                name: &str,
-                options: impl Iterator<Item = &'a CommandDataOption>,
-            ) -> ResolveResult<(Self, Option<&'a CommandDataOption>)> {
-                find_and_resolve_option(name, options).and_then(|(value, option)| {
-                    match *value {
-                        CommandDataOptionValue::Integer(value) => Self::new(
-                            <$t>::try_from(value).map_err(|error| ResolveError::Other(error.into()))?,
-                        )
-                        .ok_or(ResolveError::IntegerRangeError),
-                        _ => Err(ResolveError::InvalidType),
-                    }.map(|value| (value, Some(option)))
-                })
+            fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+                match resolve_option(option)? {
+                    CommandDataOptionValue::Integer(value) => Self::new(
+                        <$t>::try_from(*value).map_err(|error| ResolveError::Other(error.into()))?,
+                    )
+                    .ok_or(ResolveError::IntegerRangeError),
+                    _ => Err(ResolveError::InvalidType),
+                }
             }
         }
     )* };
@@ -293,10 +249,7 @@ macro_rules! bounded_number {
                 $max.map(|max| option.max_number_value(max));
             }
 
-            fn resolve<'a>(
-                name: &::std::primitive::str,
-                options: impl Iterator<Item = &'a $crate::serenity::model::application::interaction::application_command::CommandDataOption>,
-            ) -> $crate::resolve::ResolveResult<(Self, Option<&'a CommandDataOption>)> {
+            fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
                 <::std::primitive::f64 as $crate::resolve::Resolve>::resolve(name, options).and_then(Self::try_from)
             }
         }
@@ -371,10 +324,7 @@ macro_rules! bounded_string {
                 $max.map(|max| option.max_length(max));
             }
 
-            fn resolve<'a>(
-                name: &::std::primitive::str,
-                options: impl Iterator<Item = &'a $crate::serenity::model::application::interaction::application_command::CommandDataOption>,
-            ) -> $crate::resolve::ResolveResult<(Self, Option<&'a CommandDataOption>)> {
+            fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
                 <::std::string::String as $crate::resolve::Resolve>::resolve(name, options).and_then(Self::try_from)
             }
         }
