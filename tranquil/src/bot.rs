@@ -27,7 +27,10 @@ use serenity::{
 };
 
 use crate::{
-    command::{CommandMap, CommandMapEntry, CommandMapMergeError, CommandPath, SubcommandMapEntry},
+    command::{
+        CommandContext, CommandMap, CommandMapEntry, CommandMapMergeError, CommandPath,
+        SubcommandMapEntry,
+    },
     l10n::{CommandPathRef, TranslatedCommands},
     module::Module,
     AnyError, AnyResult,
@@ -326,14 +329,14 @@ async fn update_guilds(
 
 #[async_trait]
 impl EventHandler for Bot {
-    async fn ready(&self, ctx: Context, data_about_bot: Ready) {
+    async fn ready(&self, bot: Context, data_about_bot: Ready) {
         if self.notify_connect(&data_about_bot.user.name, data_about_bot.guilds.len()) {
-            self.update_application_commands(&ctx.http, &data_about_bot.guilds)
+            self.update_application_commands(&bot.http, &data_about_bot.guilds)
                 .await;
         }
     }
 
-    async fn interaction_create(&self, ctx: Context, interaction: Interaction) {
+    async fn interaction_create(&self, bot: Context, interaction: Interaction) {
         async {
             match interaction {
                 Interaction::ApplicationCommand(interaction) => {
@@ -341,10 +344,10 @@ impl EventHandler for Bot {
                     let command = self.command_map.find_command(&command_path);
 
                     match command {
-                        Some(command) => command.run(ctx, interaction).await?,
+                        Some(command) => command.run(CommandContext { bot, interaction }).await?,
                         None => {
                             interaction
-                                .create_interaction_response(&ctx.http, |response| {
+                                .create_interaction_response(bot, |response| {
                                     response.interaction_response_data(|data| {
                                         data.embed(|embed| {
                                             embed.color(colors::css::DANGER).field(
@@ -362,7 +365,7 @@ impl EventHandler for Bot {
                 }
                 Interaction::Autocomplete(interaction) => {
                     interaction
-                        .create_autocomplete_response(&ctx.http, |response| response)
+                        .create_autocomplete_response(bot, |response| response)
                         .await?
                 }
                 _ => {}
@@ -378,7 +381,7 @@ impl EventHandler for Bot {
 
 #[async_trait]
 impl RawEventHandler for Bot {
-    async fn raw_event(&self, _ctx: Context, event: Event) {
+    async fn raw_event(&self, _bot: Context, event: Event) {
         println!("{event:#?}");
     }
 }

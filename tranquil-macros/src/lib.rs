@@ -22,7 +22,7 @@ enum CommandPath {
 }
 
 #[derive(Default)]
-struct Attributes<'a> {
+struct SlashAttributes<'a> {
     default: Option<&'a Ident>,
     rename: Option<CommandPath>,
 }
@@ -141,7 +141,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
     item_fn.sig.ident = impl_name.clone();
 
     let attributes = {
-        let mut attributes = Attributes::default();
+        let mut attributes = SlashAttributes::default();
         for nested_meta in nested_metas.iter() {
             match nested_meta {
                 NestedMeta::Meta(Meta::NameValue(MetaNameValue { path, lit, .. })) => {
@@ -198,7 +198,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
         .sig
         .inputs
         .iter()
-        .skip(2) // TODO: Don't just skip self, CommandInteraction.
+        .skip(2) // TODO: Don't just skip &self and CommandContext.
         .filter_map(|input| match input {
             FnArg::Receiver(_) => None,
             FnArg::Typed(pat_type) => Some(pat_type),
@@ -285,18 +285,15 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
             (
                 #command_path,
                 ::std::boxed::Box::new(::tranquil::command::ModuleCommand::new(
-                    ::std::boxed::Box::new(|ctx, interaction, module: ::std::sync::Arc<Self>| {
+                    self,
+                    ::std::boxed::Box::new(|module, ctx| {
                         ::std::boxed::Box::pin(async move {
-                            let options = ::tranquil::command::resolve_command_options(&interaction.data).iter();
+                            let options = ::tranquil::resolve::resolve_command_options(&ctx.interaction.data).iter();
                             #(#parameter_resolvers)*
-                            module.#impl_name(
-                                ::tranquil::command::CommandContext{ ctx, interaction },
-                                #(#parameters),*
-                            ).await
+                            module.#impl_name(ctx, #(#parameters),*).await
                         })
                     }),
                     ::std::vec![#(#command_options),*],
-                    self,
                     #is_default_option,
                 )),
             )
@@ -307,7 +304,21 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn command_provider(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn command_provider(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let nested_metas = parse_macro_input!(attr as AttributeArgs);
+
+    let mut errors = vec![];
+
+    if let Some(meta) = nested_metas.first() {
+        errors.push(TokenStream::from(
+            syn::Error::new(
+                meta.span(),
+                "command_provider does not support any parameters",
+            )
+            .to_compile_error(),
+        ))
+    }
+
     let impl_item = parse_macro_input!(item as ItemImpl);
     let type_name = &impl_item.self_ty;
 
@@ -316,7 +327,7 @@ pub fn command_provider(_attr: TokenStream, item: TokenStream) -> TokenStream {
         _ => None,
     });
 
-    TokenStream::from(quote! {
+    let mut result = TokenStream::from(quote! {
         #impl_item
 
         impl ::tranquil::command::CommandProvider for #type_name {
@@ -328,5 +339,7 @@ pub fn command_provider(_attr: TokenStream, item: TokenStream) -> TokenStream {
                 ])
             }
         }
-    })
+    });
+    result.extend(errors);
+    result
 }
