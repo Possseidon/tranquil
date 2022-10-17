@@ -20,4 +20,4 @@ tokio = { version = "1.21", features = ["macros", "rt-multi-thread", "signal"] }
 toml = "0.5.9"
 
 [dev-dependencies]
-dotenv = "0.15.0"
+dotenvy = "0.15.5"
