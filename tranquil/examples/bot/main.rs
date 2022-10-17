@@ -15,7 +15,7 @@ fn env_var(token: &str) -> Result<String, std::env::VarError> {
 
 #[tokio::main]
 async fn main() -> AnyResult<()> {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     let bot = Bot::new()
         .application_command_update(
