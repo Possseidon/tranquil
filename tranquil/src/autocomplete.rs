@@ -13,6 +13,7 @@ use serenity::{
 };
 
 use crate::{
+    l10n::L10n,
     resolve::{Resolve, ResolveResult},
     AnyResult,
 };
@@ -49,8 +50,8 @@ impl<T: Resolve> Resolve for Autocomplete<T> {
     const KIND: CommandOptionType = T::KIND;
     const REQUIRED: bool = T::REQUIRED;
 
-    fn describe(option: &mut CreateApplicationCommandOption) {
-        T::describe(option);
+    fn describe(option: &mut CreateApplicationCommandOption, l10n: &L10n) {
+        T::describe(option, l10n);
         option.set_autocomplete(true);
     }
 
@@ -68,8 +69,8 @@ impl<T: Resolve> Resolve for Focusable<T> {
     const KIND: CommandOptionType = T::KIND;
     const REQUIRED: bool = T::REQUIRED;
 
-    fn describe(option: &mut CreateApplicationCommandOption) {
-        T::describe(option);
+    fn describe(option: &mut CreateApplicationCommandOption, l10n: &L10n) {
+        T::describe(option, l10n);
     }
 
     fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {

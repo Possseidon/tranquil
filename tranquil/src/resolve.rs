@@ -15,7 +15,7 @@ use serenity::{
     },
 };
 
-use crate::AnyError;
+use crate::{l10n::L10n, AnyError};
 
 #[derive(Debug)]
 pub enum ResolveError {
@@ -26,6 +26,7 @@ pub enum ResolveError {
     NumberRangeError,
     StringLengthError,
     NoPartialMemberData,
+    InvalidChoice,
     Other(AnyError),
 }
 
@@ -43,6 +44,7 @@ impl fmt::Display for ResolveError {
             ResolveError::NumberRangeError => write!(f, "number out of range"),
             ResolveError::StringLengthError => write!(f, "invalid string length"),
             ResolveError::NoPartialMemberData => write!(f, "no partial member data available"),
+            ResolveError::InvalidChoice => write!(f, "invalid choice"),
             ResolveError::Other(error) => error.fmt(f),
         }
     }
@@ -65,7 +67,7 @@ pub trait Resolve: Sized {
     const KIND: CommandOptionType;
     const REQUIRED: bool = true;
 
-    fn describe(_option: &mut CreateApplicationCommandOption) {}
+    fn describe(_option: &mut CreateApplicationCommandOption, _l10n: &L10n) {}
 
     fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self>;
 }
@@ -74,8 +76,8 @@ impl<T: Resolve> Resolve for Option<T> {
     const KIND: CommandOptionType = T::KIND;
     const REQUIRED: bool = false;
 
-    fn describe(option: &mut CreateApplicationCommandOption) {
-        T::describe(option);
+    fn describe(option: &mut CreateApplicationCommandOption, l10n: &L10n) {
+        T::describe(option, l10n);
     }
 
     fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
@@ -116,7 +118,7 @@ macro_rules! impl_resolve_for_integer {
         impl Resolve for $t {
             const KIND: CommandOptionType = CommandOptionType::Integer;
 
-            fn describe(option: &mut CreateApplicationCommandOption) {
+            fn describe(option: &mut CreateApplicationCommandOption, _l10n: &L10n) {
                 i64::try_from(<$t>::MIN).ok().map(|min| option.min_int_value(min));
                 i64::try_from(<$t>::MAX).ok().map(|max| option.max_int_value(max));
             }
@@ -194,7 +196,7 @@ macro_rules! impl_resolve_for_bounded_integer {
         impl<const MIN: $t, const MAX: $t> Resolve for ::bounded_integer::$b<MIN, MAX> {
             const KIND: CommandOptionType = CommandOptionType::Integer;
 
-            fn describe(option: &mut CreateApplicationCommandOption) {
+            fn describe(option: &mut CreateApplicationCommandOption, _l10n: &L10n) {
                 i64::try_from(MIN).ok().map(|min| option.min_int_value(min));
                 i64::try_from(MAX).ok().map(|max| option.max_int_value(max));
             }
@@ -373,6 +375,33 @@ macro_rules! bounded_string {
             ::std::option::Option::Some($crate::bounded_string!(@inner($max))),
         ));
     };
+}
+
+pub struct Choice {
+    pub name: String,
+    pub value: String,
+}
+
+pub trait Choices: Sized {
+    /// Only used to distinguish different types in the l10n file.
+    fn name() -> String;
+    fn choices() -> Vec<Choice>;
+    fn resolve(choice: String) -> Option<Self>;
+}
+
+impl<T: Choices> Resolve for T {
+    const KIND: CommandOptionType = CommandOptionType::String;
+
+    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+        T::resolve(String::resolve(option)?).ok_or(ResolveError::InvalidChoice)
+    }
+
+    fn describe(option: &mut CreateApplicationCommandOption, l10n: &L10n) {
+        String::describe(option, l10n);
+        for Choice { name, value } in Self::choices() {
+            l10n.describe_string_choice(&Self::name(), &name, &value, option);
+        }
+    }
 }
 
 pub fn resolve_command_options(command_data: &CommandData) -> &[CommandDataOption] {

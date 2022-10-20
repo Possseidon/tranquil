@@ -26,7 +26,7 @@ use serenity::{
 
 use crate::{
     autocomplete::{AutocompleteContext, AutocompleteFunction},
-    l10n::TranslatedCommands,
+    l10n::L10n,
     module::Module,
     AnyResult,
 };
@@ -185,7 +185,7 @@ type CommandFunction<M> = Box<
         + Sync,
 >;
 
-pub type OptionBuilder = fn(&TranslatedCommands) -> CreateApplicationCommandOption;
+pub type OptionBuilder = fn(&L10n) -> CreateApplicationCommandOption;
 
 pub struct ModuleCommand<M: Module> {
     module: Arc<M>,
@@ -217,17 +217,9 @@ impl<M: Module> ModuleCommand<M> {
 pub trait Command: Send + Sync {
     fn is_default_option(&self) -> bool;
 
-    fn add_options(
-        &self,
-        translated_commands: &TranslatedCommands,
-        command: &mut CreateApplicationCommand,
-    );
+    fn add_options(&self, l10n: &L10n, command: &mut CreateApplicationCommand);
 
-    fn add_suboptions(
-        &self,
-        translated_commands: &TranslatedCommands,
-        option: &mut CreateApplicationCommandOption,
-    );
+    fn add_suboptions(&self, l10n: &L10n, option: &mut CreateApplicationCommandOption);
 
     async fn run(&self, ctx: CommandContext) -> AnyResult<()>;
 
@@ -246,23 +238,15 @@ impl<M: Module> Command for ModuleCommand<M> {
         self.default_option
     }
 
-    fn add_options(
-        &self,
-        translated_commands: &TranslatedCommands,
-        command: &mut CreateApplicationCommand,
-    ) {
+    fn add_options(&self, l10n: &L10n, command: &mut CreateApplicationCommand) {
         for option_builder in &self.option_builders {
-            command.add_option(option_builder(translated_commands));
+            command.add_option(option_builder(l10n));
         }
     }
 
-    fn add_suboptions(
-        &self,
-        translated_commands: &TranslatedCommands,
-        command: &mut CreateApplicationCommandOption,
-    ) {
+    fn add_suboptions(&self, l10n: &L10n, command: &mut CreateApplicationCommandOption) {
         for option_builder in &self.option_builders {
-            command.add_sub_option(option_builder(translated_commands));
+            command.add_sub_option(option_builder(l10n));
         }
     }
 
