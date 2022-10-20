@@ -1,11 +1,11 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::collections::{btree_map::Entry, BTreeMap};
 
 use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use serenity::builder::{CreateApplicationCommand, CreateApplicationCommandOption};
 
 #[derive(Debug, Default, Eq, PartialEq)]
-struct InvalidLocale;
+pub struct InvalidLocale;
 
 impl std::error::Error for InvalidLocale {}
 
@@ -17,9 +17,9 @@ impl std::fmt::Display for InvalidLocale {
 
 macro_rules! make_locale {
     {$($(#[$default:ident])? $name:ident = $code:literal),* $(,)?} => {
-        #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+        #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
         #[serde(into = "&str", try_from = "&str")]
-        enum Locale {
+        pub enum Locale {
             $($(#[$default])? $name),*
         }
 
@@ -91,41 +91,51 @@ make_locale! {
     Korean = "ko",
 }
 
-#[derive(Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(transparent)]
-struct Translations(HashMap<Locale, String>);
+struct Translations(BTreeMap<Locale, String>);
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct OptionTranslations {
+struct OptionL10n {
     #[serde(default)]
     name: Translations,
     #[serde(default)]
     description: Translations,
 }
 
-#[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct CommandTranslations {
+struct CommandL10n {
     #[serde(default)]
     name: Translations,
     #[serde(default)]
     description: Translations,
     #[serde(default)]
-    subcommands: HashMap<String, CommandTranslations>,
-    #[serde(default)]
-    options: HashMap<String, OptionTranslations>,
+    subcommands: BTreeMap<String, CommandL10n>,
+    #[serde(default, with = "tuple_vec_map")]
+    options: Vec<(String, OptionL10n)>,
 }
 
-#[derive(Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(transparent)]
-pub struct TranslatedCommands(HashMap<String, CommandTranslations>);
+struct ChoiceL10n(#[serde(with = "tuple_vec_map")] Vec<(String, Translations)>);
+
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct L10n {
+    #[serde(default)]
+    commands: BTreeMap<String, CommandL10n>,
+    #[serde(default)]
+    choices: BTreeMap<String, ChoiceL10n>,
+}
 
 #[derive(Debug)]
 pub(crate) enum L10nLoadError {
     IO(std::io::Error),
     Parse(toml::de::Error),
-    DuplicateCommand { filename: String },
+    DuplicateCommand { command: String },
+    DuplicateChoice { choice: String },
 }
 
 impl From<std::io::Error> for L10nLoadError {
@@ -147,8 +157,11 @@ impl std::fmt::Display for L10nLoadError {
         match self {
             L10nLoadError::IO(error) => error.fmt(f),
             L10nLoadError::Parse(error) => error.fmt(f),
-            L10nLoadError::DuplicateCommand { filename } => {
-                write!(f, "duplicate command in {filename}")
+            L10nLoadError::DuplicateCommand { command } => {
+                write!(f, "duplicate command {command}")
+            }
+            L10nLoadError::DuplicateChoice { choice } => {
+                write!(f, "duplicate choice {choice}")
             }
         }
     }
@@ -200,7 +213,7 @@ impl<'a> CommandPathRef<'a> {
     }
 }
 
-impl TranslatedCommands {
+impl L10n {
     pub(crate) async fn from_file(filename: &str) -> Result<Self, L10nLoadError> {
         Ok(toml::from_str(&tokio::fs::read_to_string(filename).await?)?)
     }
@@ -208,28 +221,38 @@ impl TranslatedCommands {
     pub(crate) async fn from_files(
         filenames: impl Iterator<Item = &str>,
     ) -> Result<Self, L10nLoadErrors> {
-        let (translations, errors) = join_all(
+        let (l10n, errors) = join_all(
             filenames.map(|filename| async move { (filename, Self::from_file(filename).await) }),
         )
         .await
         .into_iter()
         .fold(
             (Self::default(), L10nLoadErrors::default()),
-            |(mut acc, mut errors), (filename, translations)| {
-                match translations {
-                    Ok(translations) => {
-                        errors.0.extend(translations.0.into_iter().filter_map(
-                            |(command_name, translation)| {
-                                if let Entry::Vacant(entry) = acc.0.entry(command_name) {
+            |(mut acc, mut errors), (_filename, l10n)| {
+                match l10n {
+                    Ok(l10n) => {
+                        errors.0.extend(l10n.commands.into_iter().filter_map(
+                            |(command_name, translation)| match acc.commands.entry(command_name) {
+                                Entry::Vacant(entry) => {
                                     entry.insert(translation);
                                     None
-                                } else {
-                                    Some(L10nLoadError::DuplicateCommand {
-                                        filename: filename.to_string(),
-                                    })
                                 }
+                                Entry::Occupied(entry) => Some(L10nLoadError::DuplicateCommand {
+                                    command: entry.key().clone(),
+                                }),
                             },
                         ));
+                        errors.0.extend(l10n.choices.into_iter().filter_map(
+                            |(choice_name, translation)| match acc.choices.entry(choice_name) {
+                                Entry::Vacant(entry) => {
+                                    entry.insert(translation);
+                                    None
+                                }
+                                Entry::Occupied(entry) => Some(L10nLoadError::DuplicateChoice {
+                                    choice: entry.key().clone(),
+                                }),
+                            },
+                        ))
                     }
                     Err(error) => {
                         errors.0.push(error);
@@ -239,40 +262,48 @@ impl TranslatedCommands {
             },
         );
         if errors.0.is_empty() {
-            Ok(translations)
+            Ok(l10n)
         } else {
             Err(errors)
         }
     }
 
-    fn resolve_name(&self, name: &str) -> Option<&CommandTranslations> {
-        self.0.get(name)
+    fn resolve_command_name(&self, name: &str) -> Option<&CommandL10n> {
+        self.commands.get(name)
     }
 
-    fn resolve_path(&self, path: CommandPathRef) -> Option<&CommandTranslations> {
+    fn resolve_command_path(&self, path: CommandPathRef) -> Option<&CommandL10n> {
         match path {
-            CommandPathRef::Command { name } => self.resolve_name(name),
+            CommandPathRef::Command { name } => self.resolve_command_name(name),
             CommandPathRef::Subcommand { name, subcommand } => self
-                .resolve_name(name)
+                .resolve_command_name(name)
                 .and_then(|command_translations| command_translations.subcommands.get(subcommand)),
             CommandPathRef::Grouped {
                 name,
                 group,
                 subcommand,
             } => self
-                .resolve_name(name)
+                .resolve_command_name(name)
                 .and_then(|command_translations| command_translations.subcommands.get(group))
                 .and_then(|command_translations| command_translations.subcommands.get(subcommand)),
         }
     }
 
-    fn resolve_option(&self, path: CommandPathRef, name: &str) -> Option<&OptionTranslations> {
-        self.resolve_path(path)
-            .and_then(|translations| translations.options.get(name))
+    fn resolve_command_option(
+        &self,
+        path: CommandPathRef,
+        command_name: &str,
+    ) -> Option<&OptionL10n> {
+        self.resolve_command_path(path).and_then(|translations| {
+            translations
+                .options
+                .iter()
+                .find_map(|(name, option)| (name == command_name).then_some(option))
+        })
     }
 
     pub(crate) fn describe_command(&self, name: &str, command: &mut CreateApplicationCommand) {
-        let translations = self.resolve_name(name);
+        let translations = self.resolve_command_name(name);
         let description =
             get_default_translation(translations.map(|translations| &translations.description));
 
@@ -280,10 +311,10 @@ impl TranslatedCommands {
 
         if let Some(translations) = translations {
             for (locale, translation) in &translations.name.0 {
-                command.name_localized(locale.to_string(), translation);
+                command.name_localized(locale, translation);
             }
             for (locale, translation) in &translations.description.0 {
-                command.description_localized(locale.to_string(), translation);
+                command.description_localized(locale, translation);
             }
         }
     }
@@ -293,7 +324,7 @@ impl TranslatedCommands {
         path: CommandPathRef,
         option: &mut CreateApplicationCommandOption,
     ) {
-        let translations = self.resolve_path(path);
+        let translations = self.resolve_command_path(path);
         let description =
             get_default_translation(translations.map(|translations| &translations.description));
 
@@ -301,21 +332,21 @@ impl TranslatedCommands {
 
         if let Some(translations) = translations {
             for (locale, translation) in &translations.name.0 {
-                option.name_localized(locale.to_string(), translation);
+                option.name_localized(locale, translation);
             }
             for (locale, translation) in &translations.description.0 {
-                option.description_localized(locale.to_string(), translation);
+                option.description_localized(locale, translation);
             }
         }
     }
 
-    pub fn describe_option(
+    pub fn describe_command_option(
         &self,
         path: CommandPathRef,
         name: &str,
         option: &mut CreateApplicationCommandOption,
     ) {
-        let translations = self.resolve_option(path, name);
+        let translations = self.resolve_command_option(path, name);
         let description =
             get_default_translation(translations.map(|translations| &translations.description));
 
@@ -323,17 +354,45 @@ impl TranslatedCommands {
 
         if let Some(translations) = translations {
             for (locale, translation) in &translations.name.0 {
-                option.name_localized(locale.to_string(), translation);
+                option.name_localized(locale, translation);
             }
             for (locale, translation) in &translations.description.0 {
-                option.description_localized(locale.to_string(), translation);
+                option.description_localized(locale, translation);
+            }
+        }
+    }
+
+    pub(crate) fn describe_string_choice(
+        &self,
+        name: &str,
+        choice: impl Into<String>,
+        value: impl Into<String>,
+        option: &mut CreateApplicationCommandOption,
+    ) {
+        let choice = choice.into();
+        let translations = self.choices.get(name).and_then(|translations| {
+            translations
+                .0
+                .iter()
+                .find_map(|(choice_name, translations)| {
+                    (choice_name == &choice).then_some(translations)
+                })
+        });
+        match translations {
+            Some(translations) => {
+                // TODO: Remove &choice and value.into() in next major serenity release.
+                option.add_string_choice_localized(&choice, value.into(), &translations.0);
+            }
+            None => {
+                // TODO: Remove value.into() in next major serenity release.
+                option.add_string_choice(choice, value.into());
             }
         }
     }
 }
 
 pub trait CommandL10nProvider {
-    fn l10n_path(&self) -> Option<&'static str> {
+    fn l10n_path(&self) -> Option<&str> {
         None
     }
 }

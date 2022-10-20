@@ -318,16 +318,17 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let command_options = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
         quote! {
-            (|translated_commands: &::tranquil::l10n::TranslatedCommands| {
+            (|l10n: &::tranquil::l10n::L10n| {
                 let mut option = ::serenity::builder::CreateApplicationCommandOption::default();
                 <#ty as ::tranquil::resolve::Resolve>::describe(
                     option
                         .kind(<#ty as ::tranquil::resolve::Resolve>::KIND)
-                        .required(<#ty as ::tranquil::resolve::Resolve>::REQUIRED)
+                        .required(<#ty as ::tranquil::resolve::Resolve>::REQUIRED),
+                    l10n,
                 );
-                translated_commands.describe_option(#command_path_ref, ::std::stringify!(#pat), &mut option);
+                l10n.describe_command_option(#command_path_ref, ::std::stringify!(#pat), &mut option);
                 option
-            }) as fn(&::tranquil::l10n::TranslatedCommands) -> ::serenity::builder::CreateApplicationCommandOption
+            }) as fn(&::tranquil::l10n::L10n) -> ::serenity::builder::CreateApplicationCommandOption
         }
     });
 

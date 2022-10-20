@@ -32,7 +32,7 @@ use crate::{
         CommandContext, CommandMap, CommandMapEntry, CommandMapMergeError, CommandPath,
         SubcommandMapEntry,
     },
-    l10n::{CommandPathRef, TranslatedCommands},
+    l10n::{CommandPathRef, L10n},
     module::Module,
     AnyError, AnyResult,
 };
@@ -50,7 +50,7 @@ pub struct Bot {
     application_command_update: Option<ApplicationCommandUpdate>,
     command_map: CommandMap,
     modules: Vec<Arc<dyn Module>>,
-    translated_commands: TranslatedCommands,
+    l10n: L10n,
 }
 
 impl Default for Bot {
@@ -60,7 +60,7 @@ impl Default for Bot {
             application_command_update: Some(ApplicationCommandUpdate::default()),
             command_map: Default::default(),
             modules: Default::default(),
-            translated_commands: Default::default(),
+            l10n: Default::default(),
         }
     }
 }
@@ -108,10 +108,8 @@ impl Bot {
     }
 
     async fn load_translations(&mut self) -> AnyResult<()> {
-        self.translated_commands = TranslatedCommands::from_files(
-            self.modules.iter().filter_map(|module| module.l10n_path()),
-        )
-        .await?;
+        self.l10n =
+            L10n::from_files(self.modules.iter().filter_map(|module| module.l10n_path())).await?;
         Ok(())
     }
 
@@ -121,17 +119,16 @@ impl Bot {
             .map(|(name, command)| {
                 let mut application_command = CreateApplicationCommand::default();
 
-                self.translated_commands
-                    .describe_command(name, &mut application_command);
+                self.l10n.describe_command(name, &mut application_command);
 
                 match command {
                     CommandMapEntry::Command(command) => {
-                        command.add_options(&self.translated_commands, &mut application_command);
+                        command.add_options(&self.l10n, &mut application_command);
                     }
                     CommandMapEntry::Subcommands(subcommands) => {
                         for (subcommand, entry) in subcommands {
                             application_command.create_option(|option| {
-                                self.translated_commands.describe_subcommand(
+                                self.l10n.describe_subcommand(
                                     CommandPathRef::Subcommand { name, subcommand },
                                     option,
                                 );
@@ -142,14 +139,14 @@ impl Bot {
                                             .kind(CommandOptionType::SubCommand)
                                             .default_option(command.is_default_option());
 
-                                        command.add_suboptions(&self.translated_commands, option);
+                                        command.add_suboptions(&self.l10n, option);
                                     }
                                     SubcommandMapEntry::Group(command_map) => {
                                         let group = subcommand;
                                         option.kind(CommandOptionType::SubCommandGroup);
                                         for (subcommand, command) in command_map {
                                             option.create_sub_option(|option| {
-                                                self.translated_commands.describe_subcommand(
+                                                self.l10n.describe_subcommand(
                                                     CommandPathRef::Grouped {
                                                         name,
                                                         group,
@@ -162,10 +159,7 @@ impl Bot {
                                                     .kind(CommandOptionType::SubCommand)
                                                     .default_option(command.is_default_option());
 
-                                                command.add_suboptions(
-                                                    &self.translated_commands,
-                                                    option,
-                                                );
+                                                command.add_suboptions(&self.l10n, option);
 
                                                 option
                                             });
