@@ -383,6 +383,7 @@ pub struct Choice {
 }
 
 pub trait Choices: Sized {
+    /// Only used to distinguish different types in the l10n file.
     fn name() -> String;
     fn choices() -> Vec<Choice>;
     fn resolve(choice: String) -> Option<Self>;

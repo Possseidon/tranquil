@@ -3,8 +3,10 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
     parse::Parse, parse_macro_input, spanned::Spanned, AttributeArgs, FnArg, Ident, ImplItem,
-    ItemFn, ItemImpl, Lit, LitStr, Meta, MetaNameValue, NestedMeta, PatType,
+    ItemEnum, ItemFn, ItemImpl, Lit, LitStr, Meta, MetaNameValue, NestedMeta, PatType,
 };
+
+// TODO: Use explicit trait methods in all quote! macros.
 
 enum CommandPath {
     Command {
@@ -260,7 +262,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
             Autocomplete::CustomName(name) => format_ident!("{name}"),
         };
         quote! {
-            Some(
+            ::std::option::Option::Some(
                 ::std::boxed::Box::new(|module, ctx| {
                     ::std::boxed::Box::pin(async move {
                         module.#autocompleter_name(ctx).await
@@ -269,7 +271,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
             )
         }
     } else {
-        quote! { None }
+        quote! { ::std::option::Option::None }
     };
 
     let make_command_path = |reference| {
@@ -459,4 +461,50 @@ pub fn command_provider(attr: TokenStream, item: TokenStream) -> TokenStream {
     });
     result.extend(errors);
     result
+}
+
+#[proc_macro_derive(Choices)]
+pub fn derive_choices(item: TokenStream) -> TokenStream {
+    // TODO: Better error messages for unsupported enums.
+
+    let enum_item = parse_macro_input!(item as ItemEnum);
+    let name = enum_item.ident;
+    let variants = enum_item.variants;
+
+    let choices = variants.iter().map(|variant| {
+        let name = &variant.ident;
+        quote! {
+            ::tranquil::resolve::Choice {
+                name: ::std::convert::From::from(::std::stringify!(#name)),
+                value: ::std::convert::From::from(::std::stringify!(#name)),
+            }
+        }
+    });
+
+    let resolvers = variants.iter().map(|variant| {
+        let name = &variant.ident;
+        quote! {
+            ::std::stringify!(#name) => ::std::option::Option::Some(Self::#name),
+        }
+    });
+
+    quote! {
+        impl ::tranquil::resolve::Choices for #name {
+            fn name() -> ::std::string::String {
+                ::std::convert::From::from(::std::stringify!(#name))
+            }
+
+            fn choices() -> ::std::vec::Vec<::tranquil::resolve::Choice> {
+                ::std::vec![#(#choices),*]
+            }
+
+            fn resolve(option: ::std::string::String) -> ::std::option::Option<Self> {
+                match ::std::convert::AsRef::as_ref(&option) {
+                    #(#resolvers)*
+                    _ => ::std::option::Option::None,
+                }
+            }
+        }
+    }
+    .into()
 }
