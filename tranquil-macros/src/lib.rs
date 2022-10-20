@@ -320,17 +320,21 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let command_options = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
         quote! {
-            (|l10n: &::tranquil::l10n::L10n| {
-                let mut option = ::serenity::builder::CreateApplicationCommandOption::default();
-                <#ty as ::tranquil::resolve::Resolve>::describe(
+            (
+                ::std::convert::From::from(::std::stringify!(#pat)),
+                (|l10n: &::tranquil::l10n::L10n| {
+                    let mut option = ::serenity::builder::CreateApplicationCommandOption::default();
+                    <#ty as ::tranquil::resolve::Resolve>::describe(
+                        option
+                            .kind(<#ty as ::tranquil::resolve::Resolve>::KIND)
+                            .required(<#ty as ::tranquil::resolve::Resolve>::REQUIRED),
+                        l10n,
+                    );
+                    // TODO: This can technically be done outside of the macro, now that the name is accessible there.
+                    l10n.describe_command_option(#command_path_ref, ::std::stringify!(#pat), &mut option);
                     option
-                        .kind(<#ty as ::tranquil::resolve::Resolve>::KIND)
-                        .required(<#ty as ::tranquil::resolve::Resolve>::REQUIRED),
-                    l10n,
-                );
-                l10n.describe_command_option(#command_path_ref, ::std::stringify!(#pat), &mut option);
-                option
-            }) as fn(&::tranquil::l10n::L10n) -> ::serenity::builder::CreateApplicationCommandOption
+                }) as fn(&::tranquil::l10n::L10n) -> ::serenity::builder::CreateApplicationCommandOption,
+            )
         }
     });
 

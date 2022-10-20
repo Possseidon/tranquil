@@ -109,7 +109,8 @@ impl Bot {
 
     async fn load_translations(&mut self) -> AnyResult<()> {
         self.l10n =
-            L10n::from_files(self.modules.iter().filter_map(|module| module.l10n_path())).await?;
+            L10n::from_yaml_files(self.modules.iter().filter_map(|module| module.l10n_path()))
+                .await?;
         Ok(())
     }
 

@@ -11,14 +11,15 @@ keywords = ["bot", "commands", "discord", "framework", "serenity"]
 categories = ["api-bindings"]
 
 [dependencies]
-tranquil-macros = { version = "0.1.0", path = "../tranquil-macros" }
 bounded-integer = { version = "0.5.3", features = ["std", "macro", "types"] }
+enumset = "1.0"
 futures = "0.3.23"
 serde = "1.0"
 serde-tuple-vec-map = "1.0"
+serde_yaml = "0.9.13"
 serenity = "0.11.5"
 tokio = { version = "1.21", features = ["macros", "rt-multi-thread", "signal"] }
-toml = "0.5.9"
+tranquil-macros = { version = "0.1.0", path = "../tranquil-macros" }
 
 [dev-dependencies]
 dotenvy = "0.15.5"
