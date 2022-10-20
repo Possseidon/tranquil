@@ -128,6 +128,18 @@ pub(crate) enum L10nLoadError {
     DuplicateCommand { filename: String },
 }
 
+impl From<std::io::Error> for L10nLoadError {
+    fn from(error: std::io::Error) -> Self {
+        Self::IO(error)
+    }
+}
+
+impl From<toml::de::Error> for L10nLoadError {
+    fn from(error: toml::de::Error) -> Self {
+        Self::Parse(error)
+    }
+}
+
 impl std::error::Error for L10nLoadError {}
 
 impl std::fmt::Display for L10nLoadError {
@@ -190,12 +202,7 @@ impl<'a> CommandPathRef<'a> {
 
 impl TranslatedCommands {
     pub(crate) async fn from_file(filename: &str) -> Result<Self, L10nLoadError> {
-        toml::from_str(
-            &tokio::fs::read_to_string(filename)
-                .await
-                .map_err(L10nLoadError::IO)?,
-        )
-        .map_err(L10nLoadError::Parse)
+        Ok(toml::from_str(&tokio::fs::read_to_string(filename).await?)?)
     }
 
     pub(crate) async fn from_files(
