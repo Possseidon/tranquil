@@ -377,18 +377,18 @@ macro_rules! bounded_string {
     };
 }
 
-pub struct Choice<T> {
+pub struct Choice {
     pub name: String,
-    pub value: T,
+    pub value: String,
 }
 
-pub trait Choices<T>: Sized {
+pub trait Choices: Sized {
     fn name() -> String;
-    fn choices() -> Vec<Choice<T>>;
-    fn resolve(option: T) -> Option<Self>;
+    fn choices() -> Vec<Choice>;
+    fn resolve(choice: String) -> Option<Self>;
 }
 
-impl<T: Choices<String>> Resolve for T {
+impl<T: Choices> Resolve for T {
     const KIND: CommandOptionType = CommandOptionType::String;
 
     fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
