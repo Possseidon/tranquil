@@ -1,23 +1,81 @@
-use std::collections::{btree_map::Entry, BTreeMap};
+use std::{
+    collections::{btree_map::Entry, BTreeMap},
+    iter::zip,
+};
 
+use enumset::{EnumSet, EnumSetType};
 use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use serenity::builder::{CreateApplicationCommand, CreateApplicationCommandOption};
 
-#[derive(Debug, Default, Eq, PartialEq)]
-pub struct InvalidLocale;
+use crate::{
+    command::{Command, CommandMap, CommandMapEntry, SubcommandMapEntry},
+    resolve::Choices,
+};
 
-impl std::error::Error for InvalidLocale {}
-
-impl std::fmt::Display for InvalidLocale {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "invalid locale")
+pub trait CommandL10nProvider {
+    fn l10n_path(&self) -> Option<&str> {
+        None
     }
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct L10n {
+    #[serde(default)]
+    commands: BTreeMap<String, CommandL10n>,
+    #[serde(default)]
+    choices: BTreeMap<String, ChoiceL10n>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CommandL10n {
+    #[serde(default)]
+    name: Translations,
+    #[serde(default)]
+    description: Translations,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    subcommands: BTreeMap<String, CommandL10n>,
+    #[serde(default, with = "tuple_vec_map", skip_serializing_if = "Vec::is_empty")]
+    options: Vec<(String, OptionL10n)>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct OptionL10n {
+    #[serde(default)]
+    name: Translations,
+    #[serde(default)]
+    description: Translations,
+}
+
+impl OptionL10n {
+    fn stubs(locales: EnumSet<Locale>) -> Self {
+        let mut l10n = Self::default();
+        l10n.fill_stubs(locales);
+        l10n
+    }
+
+    fn fill_stubs(&mut self, locales: EnumSet<Locale>) {
+        self.name.fill_stubs(locales);
+        self.description.fill_stubs(locales);
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(transparent)]
+struct ChoiceL10n(#[serde(with = "tuple_vec_map")] Vec<(String, Translations)>);
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(transparent)]
+struct Translations(BTreeMap<Locale, String>);
+
 macro_rules! make_locale {
     {$($(#[$default:ident])? $name:ident = $code:literal),* $(,)?} => {
-        #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+        #[derive(
+            Debug, Default, PartialOrd, Ord, Deserialize, Serialize, EnumSetType
+        )]
         #[serde(into = "&str", try_from = "&str")]
         pub enum Locale {
             $($(#[$default])? $name),*
@@ -91,49 +149,21 @@ make_locale! {
     Korean = "ko",
 }
 
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
-#[serde(transparent)]
-struct Translations(BTreeMap<Locale, String>);
+#[derive(Debug, Eq, PartialEq)]
+pub struct InvalidLocale;
 
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct OptionL10n {
-    #[serde(default)]
-    name: Translations,
-    #[serde(default)]
-    description: Translations,
-}
+impl std::error::Error for InvalidLocale {}
 
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-struct CommandL10n {
-    #[serde(default)]
-    name: Translations,
-    #[serde(default)]
-    description: Translations,
-    #[serde(default)]
-    subcommands: BTreeMap<String, CommandL10n>,
-    #[serde(default, with = "tuple_vec_map")]
-    options: Vec<(String, OptionL10n)>,
-}
-
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
-#[serde(transparent)]
-struct ChoiceL10n(#[serde(with = "tuple_vec_map")] Vec<(String, Translations)>);
-
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct L10n {
-    #[serde(default)]
-    commands: BTreeMap<String, CommandL10n>,
-    #[serde(default)]
-    choices: BTreeMap<String, ChoiceL10n>,
+impl std::fmt::Display for InvalidLocale {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid locale")
+    }
 }
 
 #[derive(Debug)]
-pub(crate) enum L10nLoadError {
+pub enum L10nLoadError {
     IO(std::io::Error),
-    Parse(toml::de::Error),
+    Parse(serde_yaml::Error),
     DuplicateCommand { command: String },
     DuplicateChoice { choice: String },
 }
@@ -144,8 +174,8 @@ impl From<std::io::Error> for L10nLoadError {
     }
 }
 
-impl From<toml::de::Error> for L10nLoadError {
-    fn from(error: toml::de::Error) -> Self {
+impl From<serde_yaml::Error> for L10nLoadError {
+    fn from(error: serde_yaml::Error) -> Self {
         Self::Parse(error)
     }
 }
@@ -168,7 +198,7 @@ impl std::fmt::Display for L10nLoadError {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct L10nLoadErrors(Vec<L10nLoadError>);
+pub struct L10nLoadErrors(Vec<L10nLoadError>);
 
 impl std::error::Error for L10nLoadErrors {}
 
@@ -181,10 +211,21 @@ impl std::fmt::Display for L10nLoadErrors {
     }
 }
 
-fn get_default_translation(translations: Option<&Translations>) -> &str {
-    translations
-        .and_then(|translations| translations.0.get(&Locale::default()).map(AsRef::as_ref))
-        .unwrap_or("n/a")
+#[derive(Debug)]
+pub enum L10nStubError {
+    MismatchedOptions,
+}
+
+impl std::error::Error for L10nStubError {}
+
+impl std::fmt::Display for L10nStubError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            L10nStubError::MismatchedOptions => {
+                writeln!(f, "mismatched options ")
+            }
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -214,15 +255,31 @@ impl<'a> CommandPathRef<'a> {
 }
 
 impl L10n {
-    pub(crate) async fn from_file(filename: &str) -> Result<Self, L10nLoadError> {
-        Ok(toml::from_str(&tokio::fs::read_to_string(filename).await?)?)
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    pub(crate) async fn from_files(
+    pub fn from_yaml(content: &str) -> Result<Self, L10nLoadError> {
+        serde_yaml::from_str(content).map_err(L10nLoadError::Parse)
+    }
+
+    pub fn to_yaml(&self) -> serde_yaml::Result<String> {
+        serde_yaml::to_string(self)
+    }
+
+    pub async fn from_yaml_file(filename: &str) -> Result<Self, L10nLoadError> {
+        tokio::fs::read_to_string(filename)
+            .await
+            .map_err(L10nLoadError::IO)
+            .and_then(|content| Self::from_yaml(&content))
+    }
+
+    pub async fn from_yaml_files(
         filenames: impl Iterator<Item = &str>,
     ) -> Result<Self, L10nLoadErrors> {
         let (l10n, errors) = join_all(
-            filenames.map(|filename| async move { (filename, Self::from_file(filename).await) }),
+            filenames
+                .map(|filename| async move { (filename, Self::from_yaml_file(filename).await) }),
         )
         .await
         .into_iter()
@@ -231,28 +288,9 @@ impl L10n {
             |(mut acc, mut errors), (_filename, l10n)| {
                 match l10n {
                     Ok(l10n) => {
-                        errors.0.extend(l10n.commands.into_iter().filter_map(
-                            |(command_name, translation)| match acc.commands.entry(command_name) {
-                                Entry::Vacant(entry) => {
-                                    entry.insert(translation);
-                                    None
-                                }
-                                Entry::Occupied(entry) => Some(L10nLoadError::DuplicateCommand {
-                                    command: entry.key().clone(),
-                                }),
-                            },
-                        ));
-                        errors.0.extend(l10n.choices.into_iter().filter_map(
-                            |(choice_name, translation)| match acc.choices.entry(choice_name) {
-                                Entry::Vacant(entry) => {
-                                    entry.insert(translation);
-                                    None
-                                }
-                                Entry::Occupied(entry) => Some(L10nLoadError::DuplicateChoice {
-                                    choice: entry.key().clone(),
-                                }),
-                            },
-                        ))
+                        if let Err(merge_errors) = acc.merge(l10n) {
+                            errors.0.extend(merge_errors.0)
+                        }
                     }
                     Err(error) => {
                         errors.0.push(error);
@@ -266,6 +304,84 @@ impl L10n {
         } else {
             Err(errors)
         }
+    }
+
+    pub fn merge(&mut self, other: Self) -> Result<(), L10nLoadErrors> {
+        let mut errors = L10nLoadErrors::default();
+        errors.0.extend(
+            other
+                .commands
+                .into_iter()
+                .filter_map(|(command_name, translation)| {
+                    match self.commands.entry(command_name) {
+                        Entry::Vacant(entry) => {
+                            entry.insert(translation);
+                            None
+                        }
+                        Entry::Occupied(entry) => Some(L10nLoadError::DuplicateCommand {
+                            command: entry.key().clone(),
+                        }),
+                    }
+                }),
+        );
+        errors.0.extend(
+            other
+                .choices
+                .into_iter()
+                .filter_map(
+                    |(choice_name, translation)| match self.choices.entry(choice_name) {
+                        Entry::Vacant(entry) => {
+                            entry.insert(translation);
+                            None
+                        }
+                        Entry::Occupied(entry) => Some(L10nLoadError::DuplicateChoice {
+                            choice: entry.key().clone(),
+                        }),
+                    },
+                ),
+        );
+        if errors.0.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
+    }
+
+    pub fn command_stubs(
+        command_map: &CommandMap,
+        locales: EnumSet<Locale>,
+    ) -> Result<Self, L10nStubError> {
+        let mut l10n = Self::new();
+        l10n.fill_command_stubs(command_map, locales)?;
+        Ok(l10n)
+    }
+
+    pub fn fill_command_stubs(
+        &mut self,
+        command_map: &CommandMap,
+        locales: EnumSet<Locale>,
+    ) -> Result<(), L10nStubError> {
+        for (name, command_map_entry) in command_map.iter() {
+            self.commands
+                .entry(name.clone())
+                .or_default()
+                .fill_stubs_from_command_map_entry(command_map_entry, locales)?;
+        }
+        Ok(())
+    }
+
+    pub fn choice_stubs<T: Choices>(locales: EnumSet<Locale>) -> Self {
+        let mut l10n = Self::new();
+        l10n.choices.insert(
+            T::name(),
+            ChoiceL10n(
+                T::choices()
+                    .into_iter()
+                    .map(|choice| (choice.name, Translations::stubs(locales)))
+                    .collect(),
+            ),
+        );
+        l10n
     }
 
     fn resolve_command_name(&self, name: &str) -> Option<&CommandL10n> {
@@ -305,7 +421,7 @@ impl L10n {
     pub(crate) fn describe_command(&self, name: &str, command: &mut CreateApplicationCommand) {
         let translations = self.resolve_command_name(name);
         let description =
-            get_default_translation(translations.map(|translations| &translations.description));
+            translation_or_default(translations.map(|translations| &translations.description));
 
         command.name(name).description(description);
 
@@ -326,7 +442,7 @@ impl L10n {
     ) {
         let translations = self.resolve_command_path(path);
         let description =
-            get_default_translation(translations.map(|translations| &translations.description));
+            translation_or_default(translations.map(|translations| &translations.description));
 
         option.name(path.subcommand()).description(description);
 
@@ -348,7 +464,7 @@ impl L10n {
     ) {
         let translations = self.resolve_command_option(path, name);
         let description =
-            get_default_translation(translations.map(|translations| &translations.description));
+            translation_or_default(translations.map(|translations| &translations.description));
 
         option.name(name).description(description);
 
@@ -391,8 +507,102 @@ impl L10n {
     }
 }
 
-pub trait CommandL10nProvider {
-    fn l10n_path(&self) -> Option<&str> {
-        None
+impl CommandL10n {
+    fn fill_stubs_from_command_map_entry(
+        &mut self,
+        command: &CommandMapEntry,
+        locales: EnumSet<Locale>,
+    ) -> Result<(), L10nStubError> {
+        self.name.fill_stubs(locales);
+        self.description.fill_stubs(locales);
+        match command {
+            CommandMapEntry::Command(command) => {
+                self.fill_stubs_from_command(command, locales)?;
+            }
+            CommandMapEntry::Subcommands(subcommands) => {
+                for (name, subcommand) in subcommands {
+                    self.subcommands
+                        .entry(name.clone())
+                        .or_default()
+                        .fill_stubs_from_subcommand_map_entry(subcommand, locales)?;
+                }
+            }
+        }
+        Ok(())
     }
+
+    fn fill_stubs_from_subcommand_map_entry(
+        &mut self,
+        subcommand: &SubcommandMapEntry,
+        locales: EnumSet<Locale>,
+    ) -> Result<(), L10nStubError> {
+        self.name.fill_stubs(locales);
+        self.description.fill_stubs(locales);
+        match subcommand {
+            SubcommandMapEntry::Subcommand(command) => {
+                self.fill_stubs_from_command(command, locales)?;
+            }
+            SubcommandMapEntry::Group(group) => {
+                for (name, command) in group {
+                    self.subcommands
+                        .entry(name.clone())
+                        .or_default()
+                        .fill_stubs_from_command(command, locales)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn fill_stubs_from_command(
+        &mut self,
+        command: impl AsRef<dyn Command>,
+        locales: EnumSet<Locale>,
+    ) -> Result<(), L10nStubError> {
+        let command = command.as_ref();
+
+        self.name.fill_stubs(locales);
+        self.description.fill_stubs(locales);
+
+        let new_options = command.options();
+        let mut new_options = new_options.iter();
+
+        for ((current_name, current_option), name) in zip(self.options.iter_mut(), &mut new_options)
+        {
+            if name != current_name {
+                Err(L10nStubError::MismatchedOptions)?;
+            } else {
+                current_option.fill_stubs(locales);
+            }
+        }
+
+        self.options
+            .extend(new_options.map(|option| (option.clone(), OptionL10n::stubs(locales))));
+
+        Ok(())
+    }
+}
+
+impl Translations {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    fn stubs(locales: EnumSet<Locale>) -> Self {
+        let mut translations = Self::new();
+        translations.fill_stubs(locales);
+        translations
+    }
+
+    fn fill_stubs(&mut self, locales: EnumSet<Locale>) {
+        for locale in locales {
+            self.0.entry(locale).or_insert_with(|| "TODO".to_string());
+        }
+    }
+}
+
+fn translation_or_default(translations: Option<&Translations>) -> &str {
+    translations
+        .and_then(|translations| translations.0.get(&Locale::default()).map(AsRef::as_ref))
+        .unwrap_or("n/a")
 }

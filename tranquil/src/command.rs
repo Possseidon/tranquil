@@ -191,7 +191,7 @@ pub struct ModuleCommand<M: Module> {
     module: Arc<M>,
     command_function: CommandFunction<M>,
     autocomplete_function: Option<AutocompleteFunction<M>>,
-    option_builders: Vec<OptionBuilder>,
+    options: Vec<(String, OptionBuilder)>,
     default_option: bool,
 }
 
@@ -200,14 +200,14 @@ impl<M: Module> ModuleCommand<M> {
         module: Arc<M>,
         command_function: CommandFunction<M>,
         autocomplete_function: Option<AutocompleteFunction<M>>,
-        option_builders: Vec<OptionBuilder>,
+        options: Vec<(String, OptionBuilder)>,
         default_option: bool,
     ) -> Self {
         Self {
             module,
             command_function,
             autocomplete_function,
-            option_builders,
+            options,
             default_option,
         }
     }
@@ -217,12 +217,12 @@ impl<M: Module> ModuleCommand<M> {
 pub trait Command: Send + Sync {
     fn is_default_option(&self) -> bool;
 
-    fn add_options(&self, l10n: &L10n, command: &mut CreateApplicationCommand);
+    fn options(&self) -> Vec<String>;
 
+    fn add_options(&self, l10n: &L10n, command: &mut CreateApplicationCommand);
     fn add_suboptions(&self, l10n: &L10n, option: &mut CreateApplicationCommandOption);
 
     async fn run(&self, ctx: CommandContext) -> AnyResult<()>;
-
     async fn autocomplete(&self, ctx: AutocompleteContext) -> AnyResult<()>;
 }
 
@@ -238,14 +238,18 @@ impl<M: Module> Command for ModuleCommand<M> {
         self.default_option
     }
 
+    fn options(&self) -> Vec<String> {
+        self.options.iter().map(|(name, _)| name.clone()).collect()
+    }
+
     fn add_options(&self, l10n: &L10n, command: &mut CreateApplicationCommand) {
-        for option_builder in &self.option_builders {
+        for (_, option_builder) in &self.options {
             command.add_option(option_builder(l10n));
         }
     }
 
     fn add_suboptions(&self, l10n: &L10n, command: &mut CreateApplicationCommandOption) {
-        for option_builder in &self.option_builders {
+        for (_, option_builder) in &self.options {
             command.add_sub_option(option_builder(l10n));
         }
     }
