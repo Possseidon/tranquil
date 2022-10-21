@@ -5,9 +5,7 @@ use serenity::{
     model::{
         application::{
             command::CommandOptionType,
-            interaction::application_command::{
-                CommandData, CommandDataOption, CommandDataOptionValue,
-            },
+            interaction::application_command::{CommandDataOption, CommandDataOptionValue},
         },
         channel::{Attachment, PartialChannel},
         guild::{PartialMember, Role},
@@ -48,20 +46,6 @@ impl fmt::Display for ResolveError {
             ResolveError::Other(error) => error.fmt(f),
         }
     }
-}
-
-pub fn find_option<'a>(
-    name: &str,
-    mut options: impl Iterator<Item = &'a CommandDataOption>,
-) -> Option<CommandDataOption> {
-    // TODO: Avoid clone by passing in an owned iterator.
-    options.find_map(|option| (option.name == name).then_some(option.clone()))
-}
-
-fn resolve_option(option: Option<CommandDataOption>) -> ResolveResult<CommandDataOptionValue> {
-    option.map_or(Err(ResolveError::Missing), |option| {
-        option.resolved.ok_or(ResolveError::Unresolvable)
-    })
 }
 
 pub trait Resolve: Sized {
@@ -409,19 +393,48 @@ impl<T: Choices> Resolve for T {
     }
 }
 
-pub fn resolve_command_options(command_data: &CommandData) -> &[CommandDataOption] {
-    match command_data.options.as_slice() {
-        [group]
-            if group.kind == CommandOptionType::SubCommand
-                || group.kind == CommandOptionType::SubCommandGroup =>
-        {
-            match group.options.as_slice() {
-                [subcommand] if subcommand.kind == CommandOptionType::SubCommand => {
-                    &subcommand.options
-                }
-                _ => &group.options,
-            }
+fn resolve_option(option: Option<CommandDataOption>) -> ResolveResult<CommandDataOptionValue> {
+    option.map_or(Err(ResolveError::Missing), |option| {
+        option.resolved.ok_or(ResolveError::Unresolvable)
+    })
+}
+
+pub fn find_options<'a>(
+    names: impl IntoIterator<Item = &'a str>,
+    options: impl IntoIterator<Item = CommandDataOption>,
+) -> Vec<Option<CommandDataOption>> {
+    let mut options: Vec<Option<CommandDataOption>> = options.into_iter().map(Some).collect();
+    names
+        .into_iter()
+        .map(|name| {
+            options
+                .iter_mut()
+                .find_map(|option| match option {
+                    Some(CommandDataOption {
+                        name: option_name, ..
+                    }) if option_name == name => option.take(),
+                    _ => None,
+                })
+                .take()
+        })
+        .collect()
+}
+
+pub fn resolve_command_options(mut options: Vec<CommandDataOption>) -> Vec<CommandDataOption> {
+    if options.len() != 1 {
+        options
+    } else if options[0].kind == CommandOptionType::SubCommand
+        || options[0].kind == CommandOptionType::SubCommandGroup
+    {
+        let mut group = options.remove(0);
+        if group.options.len() != 1 {
+            group.options
+        } else if group.options[0].kind == CommandOptionType::SubCommand {
+            group.options.remove(0).options
+        } else {
+            group.options
         }
-        _ => &command_data.options,
+    } else {
+        options
     }
 }
