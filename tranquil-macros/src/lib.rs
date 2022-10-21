@@ -252,8 +252,12 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let parameter_resolvers = typed_parameters.clone().map(|PatType { ty, .. }| {
         quote! {
-            // Technically unwrap instead of flatten would also work, but better safe than sorry.
-            <#ty as ::tranquil::resolve::Resolve>::resolve(options.next().flatten())?
+            <#ty as ::tranquil::resolve::Resolve>::resolve(
+                ::tranquil::resolve::ResolveContext {
+                    // Technically unwrap instead of flatten would also work, but better safe than sorry.
+                    option: options.next().flatten(),
+                },
+            )?
         }
     });
 
@@ -409,8 +413,12 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let parameter_resolvers = typed_parameters.map(|PatType { ty, .. }| {
         quote! {
-            // Technically unwrap instead of flatten would also work, but better safe than sorry.
-            <#ty as ::tranquil::resolve::Resolve>::resolve(options.next().flatten())?
+            <#ty as ::tranquil::resolve::Resolve>::resolve(
+                ::tranquil::resolve::ResolveContext {
+                    // Technically unwrap instead of flatten would also work, but better safe than sorry.
+                    option: options.next().flatten(),
+                },
+            )?
         }
     });
 

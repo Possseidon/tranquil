@@ -5,16 +5,13 @@ use serenity::{
     builder::{CreateApplicationCommandOption, CreateAutocompleteResponse},
     client::Context,
     model::application::{
-        command::CommandOptionType,
-        interaction::{
-            application_command::CommandDataOption, autocomplete::AutocompleteInteraction,
-        },
+        command::CommandOptionType, interaction::autocomplete::AutocompleteInteraction,
     },
 };
 
 use crate::{
     l10n::L10n,
-    resolve::{Resolve, ResolveResult},
+    resolve::{Resolve, ResolveContext, ResolveResult},
     AnyResult,
 };
 
@@ -55,8 +52,8 @@ impl<T: Resolve> Resolve for Autocomplete<T> {
         option.set_autocomplete(true);
     }
 
-    fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self> {
-        Ok(Autocomplete(T::resolve(option)?))
+    fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
+        Ok(Autocomplete(T::resolve(ctx)?))
     }
 }
 
@@ -73,10 +70,10 @@ impl<T: Resolve> Resolve for Focusable<T> {
         T::describe(option, l10n);
     }
 
-    fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self> {
+    fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         Ok(Focusable {
-            has_focus: option.as_ref().map_or(false, |option| option.focused),
-            current: T::resolve(option)?,
+            has_focus: ctx.option.as_ref().map_or(false, |option| option.focused),
+            current: T::resolve(ctx)?,
         })
     }
 }
