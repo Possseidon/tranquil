@@ -246,15 +246,34 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
             FnArg::Typed(pat_type) => Some(pat_type),
         });
 
-    let parameters = typed_parameters.clone().map(|PatType { pat, .. }| pat);
+    let parameters = typed_parameters
+        .clone()
+        .map(|PatType { pat, .. }| pat)
+        .collect::<Vec<_>>();
 
-    let parameter_resolvers = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
+    let parameter_names = parameters
+        .iter()
+        .map(|parameter| quote! { ::std::stringify!(#parameter) });
+
+    let parameter_resolvers = typed_parameters.clone().map(|PatType { ty, .. }| {
         quote! {
-            let #pat = <#ty as ::tranquil::resolve::Resolve>::resolve(
-                ::tranquil::resolve::find_option(::std::stringify!(#pat), options.clone())
-            )?;
+            <#ty as ::tranquil::resolve::Resolve>::resolve(
+                ::tranquil::resolve::ResolveContext {
+                    // Technically unwrap instead of flatten would also work, but better safe than sorry.
+                    option: options.next().flatten(),
+                    http: ctx.bot.http.clone(),
+                },
+            )
         }
     });
+
+    let join_futures = if parameters.is_empty() {
+        quote! {}
+    } else {
+        quote! {
+            let (#(#parameters),*,) = ::tranquil::serenity::futures::try_join!(#(#parameter_resolvers),*)?;
+        }
+    };
 
     let autocompleter = if let Some(autocomplete) = attributes.autocomplete {
         let autocompleter_name = match autocomplete {
@@ -318,7 +337,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
     let command_path = make_command_path(false);
     let command_path_ref = make_command_path(true);
 
-    let command_options = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
+    let command_options = typed_parameters.map(|PatType { pat, ty, .. }| {
         quote! {
             (
                 ::std::convert::From::from(::std::stringify!(#pat)),
@@ -350,10 +369,15 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                 #command_path,
                 ::std::boxed::Box::new(::tranquil::command::ModuleCommand::new(
                     self,
-                    ::std::boxed::Box::new(|module, ctx| {
+                    ::std::boxed::Box::new(|module, mut ctx| {
                         ::std::boxed::Box::pin(async move {
-                            let options = ::tranquil::resolve::resolve_command_options(&ctx.interaction.data).iter();
-                            #(#parameter_resolvers)*
+                            let mut options = ::tranquil::resolve::find_options(
+                                [#(#parameter_names),*],
+                                ::tranquil::resolve::resolve_command_options(
+                                    ::std::mem::take(&mut ctx.interaction.data.options)
+                                ),
+                            ).into_iter();
+                            #join_futures
                             module.#impl_name(ctx, #(#parameters),*).await
                         })
                     }),
@@ -398,25 +422,49 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
             FnArg::Typed(pat_type) => Some(pat_type),
         });
 
-    let parameters = typed_parameters.clone().map(|PatType { pat, .. }| pat);
+    let parameters = typed_parameters
+        .clone()
+        .map(|PatType { pat, .. }| pat)
+        .collect::<Vec<_>>();
 
-    let parameter_resolvers = typed_parameters.clone().map(|PatType { pat, ty, .. }| {
+    let parameter_names = parameters
+        .iter()
+        .map(|parameter| quote! { ::std::stringify!(#parameter) });
+
+    let parameter_resolvers = typed_parameters.map(|PatType { ty, .. }| {
         quote! {
-            let #pat = <#ty as ::tranquil::resolve::Resolve>::resolve(
-                ::tranquil::resolve::find_option(::std::stringify!(#pat), options.clone())
-            )?;
+            <#ty as ::tranquil::resolve::Resolve>::resolve(
+                ::tranquil::resolve::ResolveContext {
+                    // Technically unwrap instead of flatten would also work, but better safe than sorry.
+                    option: options.next().flatten(),
+                    http: ctx.bot.http.clone(),
+                },
+            )
         }
     });
+
+    let join_futures = if parameters.is_empty() {
+        quote! {}
+    } else {
+        quote! {
+            let (#(#parameters),*,) = ::tranquil::serenity::futures::try_join!(#(#parameter_resolvers),*)?;
+        }
+    };
 
     let mut result = TokenStream::from(quote! {
         #item_fn
 
         async fn #name(
             &self,
-            ctx: ::tranquil::autocomplete::AutocompleteContext,
+            mut ctx: ::tranquil::autocomplete::AutocompleteContext,
         ) -> ::tranquil::AnyResult<()> {
-            let options = ::tranquil::resolve::resolve_command_options(&ctx.interaction.data).iter();
-            #(#parameter_resolvers)*
+            let mut options = ::tranquil::resolve::find_options(
+                [#(#parameter_names),*],
+                ::tranquil::resolve::resolve_command_options(
+                    ::std::mem::take(&mut ctx.interaction.data.options)
+                ),
+            ).into_iter();
+            #join_futures
             self.#impl_name(ctx, #(#parameters),*).await
         }
     });
