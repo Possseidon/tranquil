@@ -11,7 +11,7 @@ use serenity::{
 
 use super::{resolve_option, Resolve, ResolveContext, ResolveError, ResolveResult};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Mentionable {
     User(User, Option<PartialMember>),
     Role(Role),

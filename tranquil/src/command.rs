@@ -31,6 +31,7 @@ use crate::{
     AnyResult,
 };
 
+#[derive(Clone)]
 pub struct CommandContext {
     pub bot: Context,
     pub interaction: ApplicationCommandInteraction,
@@ -297,7 +298,7 @@ impl<M: Module> Command for ModuleCommand<M> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CommandMapMergeError {
     DuplicateCommand { path: CommandPath },
     AmbiguousSubcommand { path: CommandPath },
@@ -336,7 +337,7 @@ pub enum SubcommandMapEntry {
     Group(SubcommandGroupMap),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SubcommandGroupMap(HashMap<String, Box<dyn Command>>);
 
 impl CommandMap {
