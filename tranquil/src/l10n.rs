@@ -260,7 +260,7 @@ impl L10n {
     }
 
     pub fn from_yaml(content: &str) -> Result<Self, L10nLoadError> {
-        serde_yaml::from_str(content).map_err(L10nLoadError::Parse)
+        Ok(serde_yaml::from_str(content)?)
     }
 
     pub fn to_yaml(&self) -> serde_yaml::Result<String> {
@@ -268,10 +268,7 @@ impl L10n {
     }
 
     pub async fn from_yaml_file(filename: &str) -> Result<Self, L10nLoadError> {
-        tokio::fs::read_to_string(filename)
-            .await
-            .map_err(L10nLoadError::IO)
-            .and_then(|content| Self::from_yaml(&content))
+        Self::from_yaml(&tokio::fs::read_to_string(filename).await?)
     }
 
     pub async fn from_yaml_files(
