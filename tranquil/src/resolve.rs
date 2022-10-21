@@ -58,6 +58,7 @@ impl_resolve! {
     Attachment => Attachment,
 }
 
+mod channel;
 mod error;
 mod integer;
 mod mentionable;
@@ -66,9 +67,10 @@ mod option;
 mod string;
 mod user;
 
-pub use error::{ResolveError, ResolveResult};
-pub use mentionable::Mentionable;
-pub use string::{Choice, Choices};
+pub use channel::*;
+pub use error::*;
+pub use mentionable::*;
+pub use string::*;
 
 fn resolve_option(
     option: Option<CommandDataOption>,
