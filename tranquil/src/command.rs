@@ -180,7 +180,7 @@ impl Display for CommandPath {
 }
 
 type CommandFunction<M> = Box<
-    dyn Fn(Arc<M>, CommandContext) -> Pin<Box<dyn Future<Output = AnyResult<()>> + Send + Sync>>
+    dyn Fn(Arc<M>, CommandContext) -> Pin<Box<dyn Future<Output = AnyResult<()>> + Send>>
         + Send
         + Sync,
 >;

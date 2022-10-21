@@ -246,9 +246,14 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
             FnArg::Typed(pat_type) => Some(pat_type),
         });
 
-    let parameter_names = typed_parameters
+    let parameters = typed_parameters
         .clone()
-        .map(|PatType { pat, .. }| quote! { ::std::stringify!(#pat) });
+        .map(|PatType { pat, .. }| pat)
+        .collect::<Vec<_>>();
+
+    let parameter_names = parameters
+        .iter()
+        .map(|parameter| quote! { ::std::stringify!(#parameter) });
 
     let parameter_resolvers = typed_parameters.clone().map(|PatType { ty, .. }| {
         quote! {
@@ -257,9 +262,17 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                     // Technically unwrap instead of flatten would also work, but better safe than sorry.
                     option: options.next().flatten(),
                 },
-            )?
+            )
         }
     });
+
+    let join_futures = if parameters.is_empty() {
+        quote! {}
+    } else {
+        quote! {
+            let (#(#parameters),*,) = ::tranquil::serenity::futures::try_join!(#(#parameter_resolvers),*)?;
+        }
+    };
 
     let autocompleter = if let Some(autocomplete) = attributes.autocomplete {
         let autocompleter_name = match autocomplete {
@@ -363,7 +376,8 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     ::std::mem::take(&mut ctx.interaction.data.options)
                                 ),
                             ).into_iter();
-                            module.#impl_name(ctx, #(#parameter_resolvers),*).await
+                            #join_futures
+                            module.#impl_name(ctx, #(#parameters),*).await
                         })
                     }),
                     #autocompleter,
@@ -407,9 +421,14 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
             FnArg::Typed(pat_type) => Some(pat_type),
         });
 
-    let parameter_names = typed_parameters
+    let parameters = typed_parameters
         .clone()
-        .map(|PatType { pat, .. }| quote! { ::std::stringify!(#pat) });
+        .map(|PatType { pat, .. }| pat)
+        .collect::<Vec<_>>();
+
+    let parameter_names = parameters
+        .iter()
+        .map(|parameter| quote! { ::std::stringify!(#parameter) });
 
     let parameter_resolvers = typed_parameters.map(|PatType { ty, .. }| {
         quote! {
@@ -418,9 +437,17 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
                     // Technically unwrap instead of flatten would also work, but better safe than sorry.
                     option: options.next().flatten(),
                 },
-            )?
+            )
         }
     });
+
+    let join_futures = if parameters.is_empty() {
+        quote! {}
+    } else {
+        quote! {
+            let (#(#parameters),*,) = ::tranquil::serenity::futures::try_join!(#(#parameter_resolvers),*)?;
+        }
+    };
 
     let mut result = TokenStream::from(quote! {
         #item_fn
@@ -435,8 +462,8 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
                     ::std::mem::take(&mut ctx.interaction.data.options)
                 ),
             ).into_iter();
-
-            self.#impl_name(ctx, #(#parameter_resolvers),*).await
+            #join_futures
+            self.#impl_name(ctx, #(#parameters),*).await
         }
     });
     result.extend(errors);

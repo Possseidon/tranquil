@@ -2,6 +2,7 @@ use std::{pin::Pin, sync::Arc};
 
 use futures::Future;
 use serenity::{
+    async_trait,
     builder::{CreateApplicationCommandOption, CreateAutocompleteResponse},
     client::Context,
     model::application::{
@@ -32,10 +33,7 @@ impl AutocompleteContext {
 }
 
 pub(crate) type AutocompleteFunction<M> = Box<
-    dyn Fn(
-            Arc<M>,
-            AutocompleteContext,
-        ) -> Pin<Box<dyn Future<Output = AnyResult<()>> + Send + Sync>>
+    dyn Fn(Arc<M>, AutocompleteContext) -> Pin<Box<dyn Future<Output = AnyResult<()>> + Send>>
         + Send
         + Sync,
 >;
@@ -43,6 +41,7 @@ pub(crate) type AutocompleteFunction<M> = Box<
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Autocomplete<T>(pub T);
 
+#[async_trait]
 impl<T: Resolve> Resolve for Autocomplete<T> {
     const KIND: CommandOptionType = T::KIND;
     const REQUIRED: bool = T::REQUIRED;
@@ -52,8 +51,8 @@ impl<T: Resolve> Resolve for Autocomplete<T> {
         option.set_autocomplete(true);
     }
 
-    fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
-        Ok(Autocomplete(T::resolve(ctx)?))
+    async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
+        Ok(Autocomplete(T::resolve(ctx).await?))
     }
 }
 
@@ -62,6 +61,7 @@ pub struct Focusable<T> {
     pub current: T,
 }
 
+#[async_trait]
 impl<T: Resolve> Resolve for Focusable<T> {
     const KIND: CommandOptionType = T::KIND;
     const REQUIRED: bool = T::REQUIRED;
@@ -70,10 +70,10 @@ impl<T: Resolve> Resolve for Focusable<T> {
         T::describe(option, l10n);
     }
 
-    fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
+    async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         Ok(Focusable {
             has_focus: ctx.option.as_ref().map_or(false, |option| option.focused),
-            current: T::resolve(ctx)?,
+            current: T::resolve(ctx).await?,
         })
     }
 }

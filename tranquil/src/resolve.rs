@@ -1,6 +1,7 @@
 use std::fmt;
 
 use serenity::{
+    async_trait,
     builder::CreateApplicationCommandOption,
     model::{
         application::{
@@ -52,15 +53,17 @@ pub struct ResolveContext {
     pub option: Option<CommandDataOption>,
 }
 
+#[async_trait]
 pub trait Resolve: Sized {
     const KIND: CommandOptionType;
     const REQUIRED: bool = true;
 
     fn describe(_option: &mut CreateApplicationCommandOption, _l10n: &L10n) {}
 
-    fn resolve(ctx: ResolveContext) -> ResolveResult<Self>;
+    async fn resolve(ctx: ResolveContext) -> ResolveResult<Self>;
 }
 
+#[async_trait]
 impl<T: Resolve> Resolve for Option<T> {
     const KIND: CommandOptionType = T::KIND;
     const REQUIRED: bool = false;
@@ -69,9 +72,9 @@ impl<T: Resolve> Resolve for Option<T> {
         T::describe(option, l10n);
     }
 
-    fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
+    async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         Ok(match ctx.option {
-            Some(_) => Some(T::resolve(ctx)?),
+            Some(_) => Some(T::resolve(ctx).await?),
             None => None,
         })
     }
@@ -79,10 +82,11 @@ impl<T: Resolve> Resolve for Option<T> {
 
 macro_rules! impl_resolve {
     ($($command_option_type:ident => $t:ty),* $(,)?) => { $(
+        #[async_trait]
         impl Resolve for $t {
             const KIND: CommandOptionType = CommandOptionType::$command_option_type;
 
-            fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
+            async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
                 match resolve_option(ctx.option)? {
                     CommandDataOptionValue::$command_option_type(value) => Ok(value),
                     _ => Err(ResolveError::InvalidType),
@@ -104,6 +108,7 @@ impl_resolve! {
 
 macro_rules! impl_resolve_for_integer {
     ($($t:ty),* $(,)?) => { $(
+        #[async_trait]
         impl Resolve for $t {
             const KIND: CommandOptionType = CommandOptionType::Integer;
 
@@ -112,7 +117,7 @@ macro_rules! impl_resolve_for_integer {
                 i64::try_from(<$t>::MAX).ok().map(|max| option.max_int_value(max));
             }
 
-            fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
+            async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
                 match resolve_option(ctx.option)? {
                     CommandDataOptionValue::Integer(value) => {
                         <$t>::try_from(value).map_err(|error| ResolveError::Other(error.into()))
@@ -126,10 +131,11 @@ macro_rules! impl_resolve_for_integer {
 
 impl_resolve_for_integer!(i8, i16, i32, i128, isize, u8, u16, u32, u64, u128, usize);
 
+#[async_trait]
 impl Resolve for f32 {
     const KIND: CommandOptionType = CommandOptionType::Number;
 
-    fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
+    async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         match resolve_option(ctx.option)? {
             CommandDataOptionValue::Number(value) => Ok(value as _),
             _ => Err(ResolveError::InvalidType),
@@ -137,10 +143,11 @@ impl Resolve for f32 {
     }
 }
 
+#[async_trait]
 impl Resolve for User {
     const KIND: CommandOptionType = CommandOptionType::User;
 
-    fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
+    async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         match resolve_option(ctx.option)? {
             CommandDataOptionValue::User(value, _) => Ok(value),
             _ => Err(ResolveError::InvalidType),
@@ -148,10 +155,11 @@ impl Resolve for User {
     }
 }
 
+#[async_trait]
 impl Resolve for PartialMember {
     const KIND: CommandOptionType = CommandOptionType::User;
 
-    fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
+    async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         match resolve_option(ctx.option)? {
             CommandDataOptionValue::User(_, Some(value)) => Ok(value),
             CommandDataOptionValue::User(_, None) => Err(ResolveError::NoPartialMemberData),
@@ -166,10 +174,11 @@ pub enum Mentionable {
     Role(Role),
 }
 
+#[async_trait]
 impl Resolve for Mentionable {
     const KIND: CommandOptionType = CommandOptionType::Mentionable;
 
-    fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
+    async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         match resolve_option(ctx.option)? {
             CommandDataOptionValue::User(user, partial_member) => {
                 Ok(Mentionable::User(user, partial_member))
@@ -182,6 +191,7 @@ impl Resolve for Mentionable {
 
 macro_rules! impl_resolve_for_bounded_integer {
     ($( $t:ty => $b:ident ),* $(,)?) => { $(
+        #[async_trait]
         impl<const MIN: $t, const MAX: $t> Resolve for bounded_integer::$b<MIN, MAX> {
             const KIND: CommandOptionType = CommandOptionType::Integer;
 
@@ -190,7 +200,7 @@ macro_rules! impl_resolve_for_bounded_integer {
                 i64::try_from(MAX).ok().map(|max| option.max_int_value(max));
             }
 
-            fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
+            async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
                 match resolve_option(ctx.option)? {
                     CommandDataOptionValue::Integer(value) => Self::new(
                         <$t>::try_from(value).map_err(|error| ResolveError::Other(error.into()))?,
@@ -231,6 +241,7 @@ macro_rules! bounded_number {
         )]
         $v struct $name(::std::primitive::f64);
 
+        #[$crate::serenity::async_trait]
         impl $crate::resolve::Resolve for $name {
             const KIND: $crate::serenity::model::application::command::CommandOptionType =
                 <::std::primitive::f64 as $crate::resolve::Resolve>::KIND;
@@ -240,8 +251,8 @@ macro_rules! bounded_number {
                 $max.map(|max| option.max_number_value(max));
             }
 
-            fn resolve(ctx: $crate::resolve::ResolveContext) -> $crate::resolve::ResolveResult<Self> {
-                <::std::primitive::f64 as $crate::resolve::Resolve>::resolve(ctx).and_then(Self::try_from)
+            async fn resolve(ctx: $crate::resolve::ResolveContext) -> $crate::resolve::ResolveResult<Self> {
+                <::std::primitive::f64 as $crate::resolve::Resolve>::resolve(ctx).await.and_then(Self::try_from)
             }
         }
 
@@ -306,6 +317,7 @@ macro_rules! bounded_string {
         )]
         $v struct $name(::std::string::String);
 
+        #[$crate::serenity::async_trait]
         impl $crate::resolve::Resolve for $name {
             const KIND: $crate::serenity::model::application::command::CommandOptionType =
                 <::std::string::String as $crate::resolve::Resolve>::KIND;
@@ -315,8 +327,8 @@ macro_rules! bounded_string {
                 $max.map(|max| option.max_length(max));
             }
 
-            fn resolve(ctx: $crate::resolve::ResolveContext) -> $crate::resolve::ResolveResult<Self> {
-                <::std::string::String as $crate::resolve::Resolve>::resolve(ctx).and_then(Self::try_from)
+            async fn resolve(ctx: $crate::resolve::ResolveContext) -> $crate::resolve::ResolveResult<Self> {
+                <::std::string::String as $crate::resolve::Resolve>::resolve(ctx).await.and_then(Self::try_from)
             }
         }
 
@@ -378,11 +390,12 @@ pub trait Choices: Sized {
     fn resolve(choice: String) -> Option<Self>;
 }
 
+#[async_trait]
 impl<T: Choices> Resolve for T {
     const KIND: CommandOptionType = CommandOptionType::String;
 
-    fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
-        T::resolve(String::resolve(ctx)?).ok_or(ResolveError::InvalidChoice)
+    async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
+        T::resolve(String::resolve(ctx).await?).ok_or(ResolveError::InvalidChoice)
     }
 
     fn describe(option: &mut CreateApplicationCommandOption, l10n: &L10n) {
