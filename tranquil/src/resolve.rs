@@ -53,13 +53,14 @@ impl fmt::Display for ResolveError {
 pub fn find_option<'a>(
     name: &str,
     mut options: impl Iterator<Item = &'a CommandDataOption>,
-) -> Option<&'a CommandDataOption> {
-    options.find(|option| option.name == name)
+) -> Option<CommandDataOption> {
+    // TODO: Avoid clone by passing in an owned iterator.
+    options.find_map(|option| (option.name == name).then_some(option.clone()))
 }
 
-fn resolve_option(option: Option<&CommandDataOption>) -> ResolveResult<&CommandDataOptionValue> {
+fn resolve_option(option: Option<CommandDataOption>) -> ResolveResult<CommandDataOptionValue> {
     option.map_or(Err(ResolveError::Missing), |option| {
-        option.resolved.as_ref().ok_or(ResolveError::Unresolvable)
+        option.resolved.ok_or(ResolveError::Unresolvable)
     })
 }
 
@@ -69,7 +70,7 @@ pub trait Resolve: Sized {
 
     fn describe(_option: &mut CreateApplicationCommandOption, _l10n: &L10n) {}
 
-    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self>;
+    fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self>;
 }
 
 impl<T: Resolve> Resolve for Option<T> {
@@ -80,7 +81,7 @@ impl<T: Resolve> Resolve for Option<T> {
         T::describe(option, l10n);
     }
 
-    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+    fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self> {
         Ok(match option {
             Some(_) => Some(T::resolve(option)?),
             None => None,
@@ -93,9 +94,9 @@ macro_rules! impl_resolve {
         impl Resolve for $t {
             const KIND: CommandOptionType = CommandOptionType::$command_option_type;
 
-            fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+            fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self> {
                 match resolve_option(option)? {
-                    CommandDataOptionValue::$command_option_type(value) => Ok(value.clone()),
+                    CommandDataOptionValue::$command_option_type(value) => Ok(value),
                     _ => Err(ResolveError::InvalidType),
                 }
             }
@@ -123,10 +124,10 @@ macro_rules! impl_resolve_for_integer {
                 i64::try_from(<$t>::MAX).ok().map(|max| option.max_int_value(max));
             }
 
-            fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+            fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self> {
                 match resolve_option(option)? {
                     CommandDataOptionValue::Integer(value) => {
-                        <$t>::try_from(*value).map_err(|error| ResolveError::Other(error.into()))
+                        <$t>::try_from(value).map_err(|error| ResolveError::Other(error.into()))
                     }
                     _ => Err(ResolveError::InvalidType),
                 }
@@ -140,9 +141,9 @@ impl_resolve_for_integer!(i8, i16, i32, i128, isize, u8, u16, u32, u64, u128, us
 impl Resolve for f32 {
     const KIND: CommandOptionType = CommandOptionType::Number;
 
-    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+    fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self> {
         match resolve_option(option)? {
-            CommandDataOptionValue::Number(value) => Ok(*value as _),
+            CommandDataOptionValue::Number(value) => Ok(value as _),
             _ => Err(ResolveError::InvalidType),
         }
     }
@@ -151,9 +152,9 @@ impl Resolve for f32 {
 impl Resolve for User {
     const KIND: CommandOptionType = CommandOptionType::User;
 
-    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+    fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self> {
         match resolve_option(option)? {
-            CommandDataOptionValue::User(value, _) => Ok(value.clone()),
+            CommandDataOptionValue::User(value, _) => Ok(value),
             _ => Err(ResolveError::InvalidType),
         }
     }
@@ -162,9 +163,9 @@ impl Resolve for User {
 impl Resolve for PartialMember {
     const KIND: CommandOptionType = CommandOptionType::User;
 
-    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+    fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self> {
         match resolve_option(option)? {
-            CommandDataOptionValue::User(_, Some(value)) => Ok(value.clone()),
+            CommandDataOptionValue::User(_, Some(value)) => Ok(value),
             CommandDataOptionValue::User(_, None) => Err(ResolveError::NoPartialMemberData),
             _ => Err(ResolveError::InvalidType),
         }
@@ -180,12 +181,12 @@ pub enum Mentionable {
 impl Resolve for Mentionable {
     const KIND: CommandOptionType = CommandOptionType::Mentionable;
 
-    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+    fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self> {
         match resolve_option(option)? {
             CommandDataOptionValue::User(user, partial_member) => {
-                Ok(Mentionable::User(user.clone(), partial_member.clone()))
+                Ok(Mentionable::User(user, partial_member))
             }
-            CommandDataOptionValue::Role(role) => Ok(Mentionable::Role(role.clone())),
+            CommandDataOptionValue::Role(role) => Ok(Mentionable::Role(role)),
             _ => Err(ResolveError::InvalidType),
         }
     }
@@ -193,7 +194,7 @@ impl Resolve for Mentionable {
 
 macro_rules! impl_resolve_for_bounded_integer {
     ($( $t:ty => $b:ident ),* $(,)?) => { $(
-        impl<const MIN: $t, const MAX: $t> Resolve for ::bounded_integer::$b<MIN, MAX> {
+        impl<const MIN: $t, const MAX: $t> Resolve for bounded_integer::$b<MIN, MAX> {
             const KIND: CommandOptionType = CommandOptionType::Integer;
 
             fn describe(option: &mut CreateApplicationCommandOption, _l10n: &L10n) {
@@ -201,10 +202,10 @@ macro_rules! impl_resolve_for_bounded_integer {
                 i64::try_from(MAX).ok().map(|max| option.max_int_value(max));
             }
 
-            fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+            fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self> {
                 match resolve_option(option)? {
                     CommandDataOptionValue::Integer(value) => Self::new(
-                        <$t>::try_from(*value).map_err(|error| ResolveError::Other(error.into()))?,
+                        <$t>::try_from(value).map_err(|error| ResolveError::Other(error.into()))?,
                     )
                     .ok_or(ResolveError::IntegerRangeError),
                     _ => Err(ResolveError::InvalidType),
@@ -246,13 +247,15 @@ macro_rules! bounded_number {
             const KIND: $crate::serenity::model::application::command::CommandOptionType =
                 <::std::primitive::f64 as $crate::resolve::Resolve>::KIND;
 
-            fn describe(option: &mut $crate::serenity::builder::CreateApplicationCommandOption) {
+            fn describe(option: &mut $crate::serenity::builder::CreateApplicationCommandOption, _l10n: &$crate::l10n::L10n) {
                 $min.map(|min| option.min_number_value(min));
                 $max.map(|max| option.max_number_value(max));
             }
 
-            fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
-                <::std::primitive::f64 as $crate::resolve::Resolve>::resolve(name, options).and_then(Self::try_from)
+            fn resolve(
+                option: std::option::Option<$crate::serenity::model::application::interaction::application_command::CommandDataOption>
+            ) -> $crate::resolve::ResolveResult<Self> {
+                <::std::primitive::f64 as $crate::resolve::Resolve>::resolve(option).and_then(Self::try_from)
             }
         }
 
@@ -321,13 +324,15 @@ macro_rules! bounded_string {
             const KIND: $crate::serenity::model::application::command::CommandOptionType =
                 <::std::string::String as $crate::resolve::Resolve>::KIND;
 
-            fn describe(option: &mut $crate::serenity::builder::CreateApplicationCommandOption) {
+            fn describe(option: &mut $crate::serenity::builder::CreateApplicationCommandOption, _l10n: &$crate::l10n::L10n) {
                 $min.map(|min| option.min_length(min));
                 $max.map(|max| option.max_length(max));
             }
 
-            fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
-                <::std::string::String as $crate::resolve::Resolve>::resolve(name, options).and_then(Self::try_from)
+            fn resolve(
+                option: std::option::Option<$crate::serenity::model::application::interaction::application_command::CommandDataOption>
+            ) -> $crate::resolve::ResolveResult<Self> {
+                <::std::string::String as $crate::resolve::Resolve>::resolve(option).and_then(Self::try_from)
             }
         }
 
@@ -392,7 +397,7 @@ pub trait Choices: Sized {
 impl<T: Choices> Resolve for T {
     const KIND: CommandOptionType = CommandOptionType::String;
 
-    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+    fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self> {
         T::resolve(String::resolve(option)?).ok_or(ResolveError::InvalidChoice)
     }
 

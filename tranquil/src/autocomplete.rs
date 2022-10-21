@@ -55,7 +55,7 @@ impl<T: Resolve> Resolve for Autocomplete<T> {
         option.set_autocomplete(true);
     }
 
-    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+    fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self> {
         Ok(Autocomplete(T::resolve(option)?))
     }
 }
@@ -73,9 +73,9 @@ impl<T: Resolve> Resolve for Focusable<T> {
         T::describe(option, l10n);
     }
 
-    fn resolve(option: Option<&CommandDataOption>) -> ResolveResult<Self> {
+    fn resolve(option: Option<CommandDataOption>) -> ResolveResult<Self> {
         Ok(Focusable {
-            has_focus: option.map_or(false, |option| option.focused),
+            has_focus: option.as_ref().map_or(false, |option| option.focused),
             current: T::resolve(option)?,
         })
     }
