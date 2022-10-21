@@ -8,6 +8,7 @@ use syn::{
 
 // TODO: Use explicit trait methods in all quote! macros.
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 enum CommandPath {
     Command {
         name: String,
@@ -23,12 +24,13 @@ enum CommandPath {
     },
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 enum Autocomplete {
     DefaultName,
     CustomName(Ident),
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 struct SlashAttributes<'a> {
     default: Option<&'a Ident>,
     rename: Option<CommandPath>,

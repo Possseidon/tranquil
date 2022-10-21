@@ -7,6 +7,7 @@ use crate::l10n::L10n;
 
 use super::{Resolve, ResolveContext, ResolveError, ResolveResult};
 
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Choice {
     pub name: String,
     pub value: String,

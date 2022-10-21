@@ -16,6 +16,7 @@ use crate::{
     AnyResult,
 };
 
+#[derive(Clone)]
 pub struct AutocompleteContext {
     pub bot: Context,
     pub interaction: AutocompleteInteraction,
@@ -38,7 +39,7 @@ pub(crate) type AutocompleteFunction<M> = Box<
         + Sync,
 >;
 
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Autocomplete<T>(pub T);
 
 #[async_trait]
@@ -56,6 +57,7 @@ impl<T: Resolve> Resolve for Autocomplete<T> {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Focusable<T> {
     pub has_focus: bool,
     pub current: T,

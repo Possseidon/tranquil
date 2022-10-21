@@ -37,7 +37,7 @@ use crate::{
     AnyError, AnyResult,
 };
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ApplicationCommandUpdate {
     #[default]
     Global,
