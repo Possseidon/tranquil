@@ -24,7 +24,7 @@ macro_rules! impl_resolve_for_integer {
             async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
                 match resolve_option(ctx.option)? {
                     CommandDataOptionValue::Integer(value) => {
-                        <$t>::try_from(value).map_err(|error| ResolveError::Other(error.into()))
+                        Ok(<$t>::try_from(value)?)
                     }
                     _ => Err(ResolveError::InvalidType),
                 }
@@ -49,7 +49,7 @@ macro_rules! impl_resolve_for_bounded_integer {
             async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
                 match resolve_option(ctx.option)? {
                     CommandDataOptionValue::Integer(value) => Self::new(
-                        <$t>::try_from(value).map_err(|error| ResolveError::Other(error.into()))?,
+                        <$t>::try_from(value)?,
                     )
                     .ok_or(ResolveError::IntegerRangeError),
                     _ => Err(ResolveError::InvalidType),

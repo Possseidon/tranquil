@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{convert::Infallible, fmt, num::TryFromIntError};
 
 use crate::AnyError;
 
@@ -12,7 +12,27 @@ pub enum ResolveError {
     StringLengthError,
     NoPartialMemberData,
     InvalidChoice,
+    TryFromIntError(TryFromIntError),
+    Serenity(serenity::Error),
     Other(AnyError),
+}
+
+impl From<Infallible> for ResolveError {
+    fn from(_: Infallible) -> Self {
+        unreachable!()
+    }
+}
+
+impl From<TryFromIntError> for ResolveError {
+    fn from(error: TryFromIntError) -> Self {
+        Self::TryFromIntError(error)
+    }
+}
+
+impl From<serenity::Error> for ResolveError {
+    fn from(error: serenity::Error) -> Self {
+        Self::Serenity(error)
+    }
 }
 
 pub type ResolveResult<T> = Result<T, ResolveError>;
@@ -30,6 +50,8 @@ impl fmt::Display for ResolveError {
             ResolveError::StringLengthError => write!(f, "invalid string length"),
             ResolveError::NoPartialMemberData => write!(f, "no partial member data available"),
             ResolveError::InvalidChoice => write!(f, "invalid choice"),
+            ResolveError::TryFromIntError(error) => error.fmt(f),
+            ResolveError::Serenity(error) => error.fmt(f),
             ResolveError::Other(error) => error.fmt(f),
         }
     }
