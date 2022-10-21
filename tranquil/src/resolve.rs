@@ -1,8 +1,9 @@
-use std::fmt;
+use std::{fmt, sync::Arc};
 
 use serenity::{
     async_trait,
     builder::CreateApplicationCommandOption,
+    http::Http,
     model::{
         application::{
             command::CommandOptionType,
@@ -49,8 +50,10 @@ impl fmt::Display for ResolveError {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct ResolveContext {
     pub option: Option<CommandDataOption>,
+    pub http: Arc<Http>,
 }
 
 #[async_trait]

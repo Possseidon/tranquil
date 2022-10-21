@@ -261,6 +261,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                 ::tranquil::resolve::ResolveContext {
                     // Technically unwrap instead of flatten would also work, but better safe than sorry.
                     option: options.next().flatten(),
+                    http: ctx.bot.http.clone(),
                 },
             )
         }
@@ -436,6 +437,7 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
                 ::tranquil::resolve::ResolveContext {
                     // Technically unwrap instead of flatten would also work, but better safe than sorry.
                     option: options.next().flatten(),
+                    http: ctx.bot.http.clone(),
                 },
             )
         }
