@@ -1,9 +1,11 @@
 .*
-!.editorconfig
-!.github
-!.gitignore
-!.pre-commit-config.yaml
 
-/Cargo.lock
+!/.github/
+
+!.editorconfig
+!.gitignore
+!/.pre-commit-config.yaml
 
 /target/
+
+/Cargo.lock
