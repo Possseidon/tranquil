@@ -1,0 +1,57 @@
+commands:
+  members:
+    name:
+      de: mitglieder
+      en-US: members
+    description:
+      de: Verwalte Mitglieder
+      en-US: Manage members
+    subcommands:
+      add:
+        name:
+          de: hinzufügen
+          en-US: add
+        description:
+          de: Füge ein neues Mitglied hinzu
+          en-US: Add a new member
+        options:
+          member:
+            name:
+              de: mitglied
+              en-US: member
+            description:
+              de: Das hinzuzufügende Mitglied
+              en-US: The member to be added
+      color:
+        name:
+          de: farbe
+          en-US: color
+        description:
+          de: Ändere die Farbe eines Mitglieds
+          en-US: Change the color of a member
+        options:
+          member:
+            name:
+              de: mitglied
+              en-US: member
+            description:
+              de: Das Mitglied, dessen Farbe geändert werden soll
+              en-US: The member whose color is to be changed
+          color:
+            name:
+              de: farbe
+              en-US: color
+            description:
+              de: Die neue Farbe für das Mitglied
+              en-US: The new color for the member
+choices:
+  Color:
+    Red:
+      de: Rot
+      en-US: Red
+    Green:
+      de: Grün
+      en-US: Green
+    Blue:
+      de: Blau
+      en-US: Blue

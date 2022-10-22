@@ -10,24 +10,36 @@ pub(crate) struct ExampleModule;
 
 impl Module for ExampleModule {}
 
-impl CommandL10nProvider for ExampleModule {}
+impl CommandL10nProvider for ExampleModule {
+    fn l10n_path(&self) -> Option<&str> {
+        Some("tranquil/examples/l10n/example_module_l10n.yaml")
+    }
+}
+
+async fn pong(ctx: CommandContext) -> AnyResult<()> {
+    ctx.create_response(|response| {
+        response.interaction_response_data(|data| data.content("Pong!"))
+    })
+    .await?;
+    Ok(())
+}
 
 #[command_provider]
 #[allow(unused_variables)]
 impl ExampleModule {
     #[slash]
     async fn members_add(&self, ctx: CommandContext, member: String) -> AnyResult<()> {
-        Ok(())
+        pong(ctx).await
     }
 
     #[slash]
-    async fn members_kick(
+    async fn members_color(
         &self,
         ctx: CommandContext,
         member: String,
-        reason: String,
+        color: Color,
     ) -> AnyResult<()> {
-        Ok(())
+        pong(ctx).await
     }
 }
 
