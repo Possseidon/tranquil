@@ -36,7 +36,9 @@ macro_rules! make_partial_channels {
 
 make_partial_channels! {
     PartialTextChannel => Text,
+    PartialPrivateChannel => Private,
     PartialVoiceChannel => Voice,
+    PartialChannelCategory => Category,
     PartialNewsChannel => News,
     PartialNewsThreadChannel => NewsThread,
     PartialPublicThreadChannel => PublicThread,
