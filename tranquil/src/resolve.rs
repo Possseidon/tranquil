@@ -69,6 +69,7 @@ mod user;
 
 pub use channel::*;
 pub use error::*;
+pub use integer::*;
 pub use mentionable::*;
 pub use string::*;
 
