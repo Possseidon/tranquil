@@ -85,7 +85,7 @@ impl Bot {
         Ok(self)
     }
 
-    pub async fn run(mut self, token: impl AsRef<str>) -> AnyResult<()> {
+    pub async fn run(mut self, discord_token: impl AsRef<str>) -> AnyResult<()> {
         // TODO: Token validation doesn't work, because of the middle "timestamp" part not always being valid base64.
         // validate_token(&token).map_err(|err| {
         //     eprintln!("{err}");
@@ -97,20 +97,30 @@ impl Bot {
         let framework = StandardFramework::new();
         let intents = merge_intents(self.modules.iter().map(Deref::deref));
 
-        // TODO: Use modules to initialize framework and intents.
-
-        Ok(serenity::Client::builder(token, intents)
+        serenity::Client::builder(discord_token, intents)
             .event_handler(self)
             .framework(framework)
             .await?
             .start()
-            .await?)
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn run_until_ctrl_c(self, discord_token: impl AsRef<str>) -> AnyResult<()> {
+        tokio::select! {
+            result = self.run(discord_token) => result?,
+            result = tokio::signal::ctrl_c() => result?,
+        }
+
+        Ok(())
     }
 
     async fn load_translations(&mut self) -> AnyResult<()> {
         self.l10n =
             L10n::from_yaml_files(self.modules.iter().filter_map(|module| module.l10n_path()))
                 .await?;
+
         Ok(())
     }
 
@@ -187,7 +197,7 @@ impl Bot {
             "Reconnected"
         };
         let s = if guild_count == 1 { "" } else { "s" };
-        println!("{connected} as {bot_name} to {guild_count} guild{s}.",);
+        println!("{connected} as {bot_name} to {guild_count} guild{s}",);
         first_connect
     }
 
@@ -201,21 +211,21 @@ impl Bot {
             )
             .await;
         } else {
-            println!("Skipping updating of application commands.");
+            println!("Skipping updating of application commands");
         }
     }
 }
 
-type GuildUpdateError = (String, Option<serenity::Error>);
+type GuildUpdateError = (String, Result<(), serenity::Error>);
 
 fn print_application_command_update_errors(
     guild_update_errors: impl Iterator<Item = GuildUpdateError>,
 ) {
-    for (for_guild, error) in guild_update_errors {
-        if let Some(error) = error {
-            eprintln!("Error updating application commands {for_guild}:\n{error}")
+    for (guild, error) in guild_update_errors {
+        if let Err(error) = error {
+            eprintln!(" ⚠ {guild}\n   ▶ {error}");
         } else {
-            println!("Successfully updated application commands {for_guild}.",)
+            println!(" ✓ {guild}");
         }
     }
 }
@@ -224,7 +234,11 @@ async fn update_application_commands_globally(
     http: &Http,
     application_commands: Vec<CreateApplicationCommand>,
 ) {
-    println!("Updating application commands globally...");
+    let command_count = application_commands.len();
+    println!(
+        "Updating {command_count} application command{} globally...",
+        if command_count == 1 { "" } else { "s" }
+    );
     print_application_command_update_errors(
         [(
             "globally".to_owned(),
@@ -232,7 +246,7 @@ async fn update_application_commands_globally(
                 commands.set_application_commands(application_commands)
             })
             .await
-            .err(),
+            .map(|_| ()),
         )]
         .into_iter(),
     );
@@ -243,9 +257,13 @@ async fn update_application_commands_for_connected_guilds(
     application_commands: Vec<CreateApplicationCommand>,
     connected_guilds: &[UnavailableGuild],
 ) {
+    let command_count = application_commands.len();
     let guild_count = connected_guilds.len();
-    let s = if guild_count == 1 { "" } else { "s" };
-    println!("Updating application commands for all {guild_count} connected guild{s}...");
+    println!(
+        "Updating {command_count} application command{} for all {guild_count} connected guild{}...",
+        if command_count == 1 { "" } else { "s" },
+        if guild_count == 1 { "" } else { "s" },
+    );
     print_application_command_update_errors(
         update_guilds(
             application_commands,
@@ -261,9 +279,13 @@ async fn update_application_commands_for(
     application_commands: Vec<CreateApplicationCommand>,
     guilds: &[GuildId],
 ) {
+    let command_count = application_commands.len();
     let guild_count = guilds.len();
-    let s = if guild_count == 1 { "" } else { "s" };
-    println!("Updating application commands only for the {guild_count} specified guild{s}...");
+    println!(
+        "Updating {command_count} application command{} only for the {guild_count} specified guild{}...",
+        if command_count == 1 { "" } else { "s" },
+        if guild_count == 1 { "" } else { "s" },
+    );
     print_application_command_update_errors(
         update_guilds(application_commands, http, guilds.iter().copied()).await,
     );
@@ -300,13 +322,10 @@ async fn update_guilds(
 ) -> impl Iterator<Item = GuildUpdateError> {
     let create_application_commands = create_application_commands.into();
     let guild_names = join_all(guilds.clone().map(|guild| async move {
-        format!(
-            "for {}",
-            &Guild::get(http, guild)
-                .await
-                .map(|guild| guild.name)
-                .unwrap_or_else(|_| format!("<{}>", guild.0))
-        )
+        Guild::get(http, guild)
+            .await
+            .map(|guild| guild.name)
+            .unwrap_or_else(|_| format!("<{}>", guild.0))
     }));
     let guild_updates = join_all(guilds.clone().map(|guild| {
         let create_application_commands = create_application_commands.clone();
@@ -316,7 +335,7 @@ async fn update_guilds(
                     commands.set_application_commands(create_application_commands)
                 })
                 .await
-                .err()
+                .map(|_| ())
         }
     }));
     let (guild_names, guild_updates) = join!(guild_names, guild_updates);
@@ -330,6 +349,7 @@ impl EventHandler for Bot {
             self.update_application_commands(&bot.http, &data_about_bot.guilds)
                 .await;
         }
+        println!("Ready!");
     }
 
     async fn interaction_create(&self, bot: Context, interaction: Interaction) {
