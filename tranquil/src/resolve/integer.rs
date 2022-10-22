@@ -10,6 +10,9 @@ use crate::l10n::L10n;
 
 use super::{resolve_option, Resolve, ResolveContext, ResolveError, ResolveResult};
 
+pub const DISCORD_MIN_INTEGER: i64 = -9007199254740991;
+pub const DISCORD_MAX_INTEGER: i64 = 9007199254740991;
+
 macro_rules! impl_resolve_for_integer {
     ($($t:ty),* $(,)?) => { $(
         #[async_trait]
@@ -17,8 +20,12 @@ macro_rules! impl_resolve_for_integer {
             const KIND: CommandOptionType = CommandOptionType::Integer;
 
             fn describe(option: &mut CreateApplicationCommandOption, _l10n: &L10n) {
-                i64::try_from(<$t>::MIN).ok().map(|min| option.min_int_value(min));
-                i64::try_from(<$t>::MAX).ok().map(|max| option.max_int_value(max));
+                if let Ok(min) = i64::try_from(<$t>::MIN) {
+                    option.min_int_value(min.max(DISCORD_MIN_INTEGER));
+                }
+                if let Ok(max) = i64::try_from(<$t>::MAX) {
+                    option.max_int_value(max.min(DISCORD_MAX_INTEGER));
+                }
             }
 
             async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
@@ -42,8 +49,12 @@ macro_rules! impl_resolve_for_bounded_integer {
             const KIND: CommandOptionType = CommandOptionType::Integer;
 
             fn describe(option: &mut CreateApplicationCommandOption, _l10n: &L10n) {
-                i64::try_from(MIN).ok().map(|min| option.min_int_value(min));
-                i64::try_from(MAX).ok().map(|max| option.max_int_value(max));
+                if let Ok(min) = i64::try_from(<$t>::MIN) {
+                    option.min_int_value(min.max(DISCORD_MIN_INTEGER));
+                }
+                if let Ok(max) = i64::try_from(<$t>::MAX) {
+                    option.max_int_value(max.min(DISCORD_MAX_INTEGER));
+                }
             }
 
             async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
