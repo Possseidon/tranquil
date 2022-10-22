@@ -1,3 +1,4 @@
+#[path = "../l10n/example_module.rs"]
 mod example_module;
 
 use std::sync::Arc;
