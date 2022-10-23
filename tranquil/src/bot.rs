@@ -11,7 +11,6 @@ use serenity::{
     async_trait,
     builder::CreateApplicationCommand,
     client::{Context, EventHandler, RawEventHandler},
-    framework::StandardFramework,
     http::Http,
     model::{
         application::{
@@ -24,6 +23,7 @@ use serenity::{
         id::GuildId,
     },
     utils::colours as colors,
+    Client,
 };
 
 use crate::{
@@ -94,12 +94,10 @@ impl Bot {
 
         self.load_translations().await?;
 
-        let framework = StandardFramework::new();
         let intents = merge_intents(self.modules.iter().map(Deref::deref));
 
-        serenity::Client::builder(discord_token, intents)
+        Client::builder(discord_token, intents)
             .event_handler(self)
-            .framework(framework)
             .await?
             .start()
             .await?;
