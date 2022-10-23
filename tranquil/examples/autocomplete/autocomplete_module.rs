@@ -92,13 +92,13 @@ impl AutocompleteModule {
             response.interaction_response_data(|data| {
                 data.content(format!(
                     indoc! {r#"
-                ```rust
-                not_autocompleted:      {:?}
-                autocompleted:          {:?}
-                optional:               {:?}
-                optional_autocompleted: {:?}
-                ```
-                "#},
+                    ```rust
+                    not_autocompleted:      {:?}
+                    autocompleted:          {:?}
+                    optional:               {:?}
+                    optional_autocompleted: {:?}
+                    ```
+                    "#},
                     not_autocompleted, autocompleted, optional, optional_autocompleted
                 ))
             })
