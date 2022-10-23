@@ -1,6 +1,6 @@
 [package]
 name = "tranquil"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Possseidon <xpossseidon@gmail.com>"]
 edition = "2021"
 description = "A module framework for Discord bots with slash commands, based on serenity."
@@ -27,7 +27,7 @@ serenity = { version = "0.11.5", default-features = false, features = [
     "rustls_backend",
 ] }
 tokio = { version = "1.21", default-features = false, features = ["signal"] }
-tranquil-macros = { version = "0.1.0", path = "../tranquil-macros" }
+tranquil-macros = { version = "0.2.0", path = "../tranquil-macros" }
 
 [dev-dependencies]
 indoc = "1.0"
