@@ -1,6 +1,7 @@
+use serenity::async_trait;
 use tranquil::{
     command::CommandContext,
-    l10n::CommandL10nProvider,
+    l10n::{CommandL10nProvider, L10n, L10nLoadError},
     macros::{command_provider, slash, Choices},
     module::Module,
     AnyResult,
@@ -10,9 +11,10 @@ pub(crate) struct ExampleModule;
 
 impl Module for ExampleModule {}
 
+#[async_trait]
 impl CommandL10nProvider for ExampleModule {
-    fn l10n_path(&self) -> Option<&str> {
-        Some("tranquil/examples/l10n/example_module_l10n.yaml")
+    async fn l10n(&self) -> Result<L10n, L10nLoadError> {
+        L10n::from_yaml_file("tranquil/examples/l10n/example_module_l10n.yaml").await
     }
 }
 

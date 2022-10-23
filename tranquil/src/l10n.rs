@@ -4,27 +4,30 @@ use std::{
 };
 
 use enumset::{EnumSet, EnumSetType};
-use futures::future::join_all;
 use serde::{Deserialize, Serialize};
-use serenity::builder::{CreateApplicationCommand, CreateApplicationCommandOption};
+use serenity::{
+    async_trait,
+    builder::{CreateApplicationCommand, CreateApplicationCommandOption},
+};
 
 use crate::{
     command::{Command, CommandMap, CommandMapEntry, SubcommandMapEntry},
     resolve::Choices,
 };
 
-pub trait CommandL10nProvider {
-    fn l10n_path(&self) -> Option<&str> {
-        None
+#[async_trait]
+pub trait CommandL10nProvider: Sync {
+    async fn l10n(&self) -> Result<L10n, L10nLoadError> {
+        Ok(L10n::new())
     }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct L10n {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     commands: BTreeMap<String, CommandL10n>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     choices: BTreeMap<String, ChoiceL10n>,
 }
 
@@ -271,18 +274,12 @@ impl L10n {
         Self::from_yaml(&tokio::fs::read_to_string(filename).await?)
     }
 
-    pub async fn from_yaml_files(
-        filenames: impl Iterator<Item = &str>,
+    pub fn merge_results(
+        results: impl IntoIterator<Item = Result<Self, L10nLoadError>>,
     ) -> Result<Self, L10nLoadErrors> {
-        let (l10n, errors) = join_all(
-            filenames
-                .map(|filename| async move { (filename, Self::from_yaml_file(filename).await) }),
-        )
-        .await
-        .into_iter()
-        .fold(
+        let (l10n, errors) = results.into_iter().fold(
             (Self::default(), L10nLoadErrors::default()),
-            |(mut acc, mut errors), (_filename, l10n)| {
+            |(mut acc, mut errors), l10n| {
                 match l10n {
                     Ok(l10n) => {
                         if let Err(merge_errors) = acc.merge(l10n) {

@@ -116,8 +116,11 @@ impl Bot {
 
     async fn load_translations(&mut self) -> AnyResult<()> {
         self.l10n =
-            L10n::from_yaml_files(self.modules.iter().filter_map(|module| module.l10n_path()))
-                .await?;
+            L10n::merge_results(join_all(self.modules.iter().map(|module| module.l10n())).await)
+                .map_err(|error| {
+                    eprintln!("{error}");
+                    "invalid l10n"
+                })?;
 
         Ok(())
     }
