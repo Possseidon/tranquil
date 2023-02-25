@@ -11,6 +11,7 @@ keywords = ["bot", "commands", "discord", "framework", "serenity"]
 categories = ["api-bindings"]
 
 [dependencies]
+anyhow = "1.0"
 bounded-integer = { version = "0.5.3", features = ["types"] }
 dotenvy = "0.15.5"
 enumset = "1.0"

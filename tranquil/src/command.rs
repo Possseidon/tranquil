@@ -6,6 +6,7 @@ use std::{
     sync::Arc,
 };
 
+use anyhow::bail;
 use futures::Future;
 use serenity::{
     async_trait,
@@ -28,7 +29,6 @@ use crate::{
     autocomplete::{AutocompleteContext, AutocompleteFunction},
     l10n::L10n,
     module::Module,
-    AnyResult,
 };
 
 #[derive(Clone)]
@@ -181,7 +181,7 @@ impl Display for CommandPath {
 }
 
 type CommandFunction<M> = Box<
-    dyn Fn(Arc<M>, CommandContext) -> Pin<Box<dyn Future<Output = AnyResult<()>> + Send>>
+    dyn Fn(Arc<M>, CommandContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
         + Send
         + Sync,
 >;
@@ -223,8 +223,8 @@ pub trait Command: Send + Sync {
     fn add_options(&self, l10n: &L10n, command: &mut CreateApplicationCommand);
     fn add_suboptions(&self, l10n: &L10n, option: &mut CreateApplicationCommandOption);
 
-    async fn run(&self, ctx: CommandContext) -> AnyResult<()>;
-    async fn autocomplete(&self, ctx: AutocompleteContext) -> AnyResult<()>;
+    async fn run(&self, ctx: CommandContext) -> anyhow::Result<()>;
+    async fn autocomplete(&self, ctx: AutocompleteContext) -> anyhow::Result<()>;
 }
 
 impl Debug for dyn Command {
@@ -255,7 +255,7 @@ impl<M: Module> Command for ModuleCommand<M> {
         }
     }
 
-    async fn run(&self, ctx: CommandContext) -> AnyResult<()> {
+    async fn run(&self, ctx: CommandContext) -> anyhow::Result<()> {
         (self.command_function)(self.module.clone(), ctx).await
         // TODO: return a different type of error so e.g. invalid parameters can automatically be reported nicely like here:
 
@@ -289,11 +289,11 @@ impl<M: Module> Command for ModuleCommand<M> {
         */
     }
 
-    async fn autocomplete(&self, ctx: AutocompleteContext) -> AnyResult<()> {
+    async fn autocomplete(&self, ctx: AutocompleteContext) -> anyhow::Result<()> {
         if let Some(autocomplete_function) = &self.autocomplete_function {
             autocomplete_function(self.module.clone(), ctx).await
         } else {
-            Err("no autocomplete handler")?
+            bail!("no autocomplete handler")
         }
     }
 }

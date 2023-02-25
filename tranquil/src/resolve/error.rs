@@ -1,7 +1,5 @@
 use std::{convert::Infallible, fmt, num::TryFromIntError};
 
-use crate::AnyError;
-
 #[derive(Debug)]
 pub enum ResolveError {
     Missing,
@@ -15,7 +13,7 @@ pub enum ResolveError {
     InvalidChannelType,
     TryFromIntError(TryFromIntError),
     Serenity(serenity::Error),
-    Other(AnyError),
+    Other(anyhow::Error),
 }
 
 impl From<Infallible> for ResolveError {
