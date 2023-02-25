@@ -1,6 +1,5 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
-    error::Error,
     fmt::{Debug, Display},
     pin::Pin,
     sync::Arc,
@@ -24,6 +23,7 @@ use serenity::{
         id::MessageId,
     },
 };
+use thiserror::Error;
 
 use crate::{
     autocomplete::{AutocompleteContext, AutocompleteFunction},
@@ -298,25 +298,12 @@ impl<M: Module> Command for ModuleCommand<M> {
     }
 }
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Error)]
 pub enum CommandMapMergeError {
+    #[error("duplicate command `/{path}`")]
     DuplicateCommand { path: CommandPath },
+    #[error("command `/{path}` cannot also have subcommands")]
     AmbiguousSubcommand { path: CommandPath },
-}
-
-impl Error for CommandMapMergeError {}
-
-impl Display for CommandMapMergeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CommandMapMergeError::DuplicateCommand { path } => {
-                write!(f, "duplicate command `/{path}`")
-            }
-            CommandMapMergeError::AmbiguousSubcommand { path } => {
-                write!(f, "command `/{path}` cannot also have subcommands")
-            }
-        }
-    }
 }
 
 #[derive(Debug, Default)]
