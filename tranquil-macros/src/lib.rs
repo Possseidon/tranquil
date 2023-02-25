@@ -459,7 +459,7 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
         async fn #name(
             &self,
             mut ctx: ::tranquil::autocomplete::AutocompleteContext,
-        ) -> ::tranquil::AnyResult<()> {
+        ) -> ::tranquil::anyhow::Result<()> {
             let mut options = ::tranquil::resolve::find_options(
                 [#(#parameter_names),*],
                 ::tranquil::resolve::resolve_command_options(

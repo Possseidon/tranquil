@@ -6,10 +6,9 @@ use std::sync::Arc;
 use tranquil::{
     command::CommandProvider,
     l10n::{L10n, Locale},
-    AnyResult,
 };
 
-fn main() -> AnyResult<()> {
+fn main() -> anyhow::Result<()> {
     let module = Arc::new(example_module::ExampleModule);
     let command_map = module.command_map()?;
 

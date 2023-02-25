@@ -12,7 +12,5 @@ pub mod macros {
 
 extern crate self as tranquil;
 
+pub use anyhow;
 pub use serenity;
-
-pub type AnyError = Box<dyn std::error::Error + Send + Sync>;
-pub type AnyResult<T> = Result<T, AnyError>;

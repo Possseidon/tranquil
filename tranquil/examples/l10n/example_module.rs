@@ -4,7 +4,6 @@ use tranquil::{
     l10n::{CommandL10nProvider, L10n, L10nLoadError},
     macros::{command_provider, slash, Choices},
     module::Module,
-    AnyResult,
 };
 
 pub(crate) struct ExampleModule;
@@ -18,7 +17,7 @@ impl CommandL10nProvider for ExampleModule {
     }
 }
 
-async fn pong(ctx: CommandContext) -> AnyResult<()> {
+async fn pong(ctx: CommandContext) -> anyhow::Result<()> {
     ctx.create_response(|response| {
         response.interaction_response_data(|data| data.content("Pong!"))
     })
@@ -30,7 +29,7 @@ async fn pong(ctx: CommandContext) -> AnyResult<()> {
 #[allow(unused_variables)]
 impl ExampleModule {
     #[slash]
-    async fn members_add(&self, ctx: CommandContext, member: String) -> AnyResult<()> {
+    async fn members_add(&self, ctx: CommandContext, member: String) -> anyhow::Result<()> {
         pong(ctx).await
     }
 
@@ -40,7 +39,7 @@ impl ExampleModule {
         ctx: CommandContext,
         member: String,
         color: Color,
-    ) -> AnyResult<()> {
+    ) -> anyhow::Result<()> {
         pong(ctx).await
     }
 }

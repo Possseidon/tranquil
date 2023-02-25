@@ -5,7 +5,6 @@ use tranquil::{
     l10n::CommandL10nProvider,
     macros::{autocompleter, command_provider, slash},
     module::Module,
-    AnyResult,
 };
 
 pub(crate) struct AutocompleteModule;
@@ -20,11 +19,12 @@ impl AutocompleteModule {
         &self,
         ctx: AutocompleteContext,
         value: String,
-    ) -> AnyResult<()> {
+    ) -> anyhow::Result<()> {
         let you_typed = format!("You typed: {value}");
 
         ctx.create_response(|response| response.add_string_choice(you_typed, value))
             .await?;
+
         Ok(())
     }
 
@@ -36,7 +36,7 @@ impl AutocompleteModule {
         autocompleted: Focusable<Option<String>>,
         optional: Option<String>,
         optional_autocompleted: Option<String>,
-    ) -> AnyResult<()> {
+    ) -> anyhow::Result<()> {
         let not_autocompleted_completion = format!("not_autocompleted: {not_autocompleted:?}");
         let autocompleted_completion = format!("autocompleted: {autocompleted:?}");
         let optional_completion = format!("optional: {optional:?}");
@@ -70,7 +70,11 @@ impl AutocompleteModule {
 #[command_provider]
 impl AutocompleteModule {
     #[slash(autocomplete)]
-    async fn echo_simple(&self, ctx: CommandContext, value: Autocomplete<String>) -> AnyResult<()> {
+    async fn echo_simple(
+        &self,
+        ctx: CommandContext,
+        value: Autocomplete<String>,
+    ) -> anyhow::Result<()> {
         ctx.create_response(|response| {
             response
                 .interaction_response_data(|data| data.content(format!("```rust\n{value:?}\n```")))
@@ -87,7 +91,7 @@ impl AutocompleteModule {
         autocompleted: Autocomplete<String>,
         optional: Option<String>,
         optional_autocompleted: Autocomplete<Option<String>>,
-    ) -> AnyResult<()> {
+    ) -> anyhow::Result<()> {
         ctx.create_response(|response| {
             response.interaction_response_data(|data| {
                 data.content(format!(

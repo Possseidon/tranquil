@@ -1,13 +1,12 @@
 use tranquil::{
     bot::Bot,
     utils::{debug_guilds_from_env, discord_token_from_env, dotenv_if_exists},
-    AnyResult,
 };
 
 mod autocomplete_module;
 
 #[tokio::main]
-async fn main() -> AnyResult<()> {
+async fn main() -> anyhow::Result<()> {
     dotenv_if_exists()?;
 
     Bot::new()

@@ -6,6 +6,7 @@ use std::{
     },
 };
 
+use anyhow::anyhow;
 use futures::{future::join_all, join};
 use serenity::{
     async_trait,
@@ -34,7 +35,6 @@ use crate::{
     },
     l10n::{CommandPathRef, L10n},
     module::Module,
-    AnyError, AnyResult,
 };
 
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -85,7 +85,7 @@ impl Bot {
         Ok(self)
     }
 
-    pub async fn run(mut self, discord_token: impl AsRef<str>) -> AnyResult<()> {
+    pub async fn run(mut self, discord_token: impl AsRef<str>) -> anyhow::Result<()> {
         // TODO: Token validation doesn't work, because of the middle "timestamp" part not always being valid base64.
         // validate_token(&token).map_err(|err| {
         //     eprintln!("{err}");
@@ -105,7 +105,7 @@ impl Bot {
         Ok(())
     }
 
-    pub async fn run_until_ctrl_c(self, discord_token: impl AsRef<str>) -> AnyResult<()> {
+    pub async fn run_until_ctrl_c(self, discord_token: impl AsRef<str>) -> anyhow::Result<()> {
         tokio::select! {
             result = self.run(discord_token) => result?,
             result = tokio::signal::ctrl_c() => result?,
@@ -114,12 +114,12 @@ impl Bot {
         Ok(())
     }
 
-    async fn load_translations(&mut self) -> AnyResult<()> {
+    async fn load_translations(&mut self) -> anyhow::Result<()> {
         self.l10n =
             L10n::merge_results(join_all(self.modules.iter().map(|module| module.l10n())).await)
                 .map_err(|error| {
                     eprintln!("{error}");
-                    "invalid l10n"
+                    anyhow!("invalid l10n")
                 })?;
 
         Ok(())
@@ -396,7 +396,7 @@ impl EventHandler for Bot {
                 }
                 _ => {}
             }
-            Ok::<(), AnyError>(())
+            Ok::<(), anyhow::Error>(())
         }
         .await
         .unwrap_or_else(|error| {

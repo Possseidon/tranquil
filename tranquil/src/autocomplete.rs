@@ -13,7 +13,6 @@ use serenity::{
 use crate::{
     l10n::L10n,
     resolve::{Resolve, ResolveContext, ResolveResult},
-    AnyResult,
 };
 
 #[derive(Clone)]
@@ -34,7 +33,7 @@ impl AutocompleteContext {
 }
 
 pub(crate) type AutocompleteFunction<M> = Box<
-    dyn Fn(Arc<M>, AutocompleteContext) -> Pin<Box<dyn Future<Output = AnyResult<()>> + Send>>
+    dyn Fn(Arc<M>, AutocompleteContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
         + Send
         + Sync,
 >;
