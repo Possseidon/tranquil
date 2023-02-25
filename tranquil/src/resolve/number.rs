@@ -1,8 +1,6 @@
-use serenity::{
-    async_trait,
-    model::application::{
-        command::CommandOptionType, interaction::application_command::CommandDataOptionValue,
-    },
+use async_trait::async_trait;
+use serenity::model::application::{
+    command::CommandOptionType, interaction::application_command::CommandDataOptionValue,
 };
 
 use super::{resolve_option, Resolve, ResolveContext, ResolveError, ResolveResult};
@@ -32,7 +30,7 @@ macro_rules! bounded_number {
         )]
         $v struct $name(::std::primitive::f64);
 
-        #[$crate::serenity::async_trait]
+        #[$crate::async_trait]
         impl $crate::resolve::Resolve for $name {
             const KIND: $crate::serenity::model::application::command::CommandOptionType =
                 <::std::primitive::f64 as $crate::resolve::Resolve>::KIND;

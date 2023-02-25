@@ -3,12 +3,10 @@ use std::{
     iter::zip,
 };
 
+use async_trait::async_trait;
 use enumset::{EnumSet, EnumSetType};
 use serde::{Deserialize, Serialize};
-use serenity::{
-    async_trait,
-    builder::{CreateApplicationCommand, CreateApplicationCommandOption},
-};
+use serenity::builder::{CreateApplicationCommand, CreateApplicationCommandOption};
 
 use crate::{
     command::{Command, CommandMap, CommandMapEntry, SubcommandMapEntry},

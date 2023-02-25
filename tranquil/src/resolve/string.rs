@@ -1,6 +1,6 @@
+use async_trait::async_trait;
 use serenity::{
-    async_trait, builder::CreateApplicationCommandOption,
-    model::application::command::CommandOptionType,
+    builder::CreateApplicationCommandOption, model::application::command::CommandOptionType,
 };
 
 use crate::l10n::L10n;
@@ -51,7 +51,7 @@ macro_rules! bounded_string {
         )]
         $v struct $name(::std::string::String);
 
-        #[$crate::serenity::async_trait]
+        #[$crate::async_trait]
         impl $crate::resolve::Resolve for $name {
             const KIND: $crate::serenity::model::application::command::CommandOptionType =
                 <::std::string::String as $crate::resolve::Resolve>::KIND;

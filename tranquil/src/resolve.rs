@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use serenity::{
-    async_trait,
     builder::CreateApplicationCommandOption,
     http::Http,
     model::{

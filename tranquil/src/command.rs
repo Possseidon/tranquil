@@ -7,9 +7,9 @@ use std::{
 };
 
 use anyhow::bail;
+use async_trait::async_trait;
 use futures::Future;
 use serenity::{
-    async_trait,
     builder::{
         CreateApplicationCommand, CreateApplicationCommandOption, CreateInteractionResponse,
         CreateInteractionResponseFollowup, EditInteractionResponse,

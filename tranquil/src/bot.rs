@@ -7,9 +7,9 @@ use std::{
 };
 
 use anyhow::anyhow;
+use async_trait::async_trait;
 use futures::{future::join_all, join};
 use serenity::{
-    async_trait,
     builder::CreateApplicationCommand,
     client::{Context, EventHandler, RawEventHandler},
     http::Http,

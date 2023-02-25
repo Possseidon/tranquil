@@ -1,4 +1,4 @@
-use serenity::async_trait;
+use async_trait::async_trait;
 use tranquil::{
     command::CommandContext,
     l10n::{CommandL10nProvider, L10n, L10nLoadError},

@@ -1,5 +1,5 @@
+use async_trait::async_trait;
 use serenity::{
-    async_trait,
     builder::CreateApplicationCommandOption,
     model::application::{
         command::CommandOptionType, interaction::application_command::CommandDataOptionValue,
