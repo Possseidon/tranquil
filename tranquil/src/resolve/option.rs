@@ -1,6 +1,6 @@
+use async_trait::async_trait;
 use serenity::{
-    async_trait, builder::CreateApplicationCommandOption,
-    model::application::command::CommandOptionType,
+    builder::CreateApplicationCommandOption, model::application::command::CommandOptionType,
 };
 
 use crate::l10n::L10n;

@@ -1,12 +1,10 @@
-use serenity::{
-    async_trait,
-    model::{
-        application::{
-            command::CommandOptionType, interaction::application_command::CommandDataOptionValue,
-        },
-        guild::PartialMember,
-        user::User,
+use async_trait::async_trait;
+use serenity::model::{
+    application::{
+        command::CommandOptionType, interaction::application_command::CommandDataOptionValue,
     },
+    guild::PartialMember,
+    user::User,
 };
 
 use super::{resolve_option, Resolve, ResolveContext, ResolveError, ResolveResult};
