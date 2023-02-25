@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use enumset::{EnumSet, EnumSetType};
 use serde::{Deserialize, Serialize};
 use serenity::builder::{CreateApplicationCommand, CreateApplicationCommandOption};
+use thiserror::Error;
 
 use crate::{
     command::{Command, CommandMap, CommandMapEntry, SubcommandMapEntry},
@@ -150,58 +151,24 @@ make_locale! {
     Korean = "ko",
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Error)]
+#[error("invalid locale")]
 pub struct InvalidLocale;
 
-impl std::error::Error for InvalidLocale {}
-
-impl std::fmt::Display for InvalidLocale {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "invalid locale")
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum L10nLoadError {
-    IO(std::io::Error),
-    Parse(serde_yaml::Error),
+    #[error(transparent)]
+    IO(#[from] std::io::Error),
+    #[error(transparent)]
+    Parse(#[from] serde_yaml::Error),
+    #[error("duplicate command {command}")]
     DuplicateCommand { command: String },
+    #[error("duplicate choice {choice}")]
     DuplicateChoice { choice: String },
 }
 
-impl From<std::io::Error> for L10nLoadError {
-    fn from(error: std::io::Error) -> Self {
-        Self::IO(error)
-    }
-}
-
-impl From<serde_yaml::Error> for L10nLoadError {
-    fn from(error: serde_yaml::Error) -> Self {
-        Self::Parse(error)
-    }
-}
-
-impl std::error::Error for L10nLoadError {}
-
-impl std::fmt::Display for L10nLoadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            L10nLoadError::IO(error) => error.fmt(f),
-            L10nLoadError::Parse(error) => error.fmt(f),
-            L10nLoadError::DuplicateCommand { command } => {
-                write!(f, "duplicate command {command}")
-            }
-            L10nLoadError::DuplicateChoice { choice } => {
-                write!(f, "duplicate choice {choice}")
-            }
-        }
-    }
-}
-
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Error)]
 pub struct L10nLoadErrors(Vec<L10nLoadError>);
-
-impl std::error::Error for L10nLoadErrors {}
 
 impl std::fmt::Display for L10nLoadErrors {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -212,21 +179,10 @@ impl std::fmt::Display for L10nLoadErrors {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum L10nStubError {
+    #[error("mismatched options")]
     MismatchedOptions,
-}
-
-impl std::error::Error for L10nStubError {}
-
-impl std::fmt::Display for L10nStubError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            L10nStubError::MismatchedOptions => {
-                writeln!(f, "mismatched options ")
-            }
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
