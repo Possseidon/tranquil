@@ -13,6 +13,8 @@ pub struct Choice {
     pub value: String,
 }
 
+pub use tranquil_macros::Choices;
+
 pub trait Choices: Sized {
     /// Only used to distinguish different types in the l10n file.
     fn name() -> String;

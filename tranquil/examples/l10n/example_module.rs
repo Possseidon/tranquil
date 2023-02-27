@@ -2,13 +2,13 @@ use async_trait::async_trait;
 use tranquil::{
     command::CommandContext,
     l10n::{CommandL10nProvider, L10n, L10nLoadError},
-    macros::{command_provider, slash, Choices},
+    macros::{command_provider, slash},
     module::Module,
+    resolve::Choices,
 };
 
+#[derive(Module)]
 pub(crate) struct ExampleModule;
-
-impl Module for ExampleModule {}
 
 #[async_trait]
 impl CommandL10nProvider for ExampleModule {
