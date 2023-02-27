@@ -14,6 +14,8 @@ use crate::{
     resolve::Choices,
 };
 
+pub use tranquil_macros::CommandL10nProvider;
+
 #[async_trait]
 pub trait CommandL10nProvider: Sync {
     async fn l10n(&self) -> Result<L10n, L10nLoadError> {

@@ -5,11 +5,8 @@ use tranquil::{
     module::Module,
 };
 
+#[derive(Module, CommandL10nProvider)]
 pub(crate) struct PingModule;
-
-impl Module for PingModule {}
-
-impl CommandL10nProvider for PingModule {}
 
 #[command_provider]
 impl PingModule {

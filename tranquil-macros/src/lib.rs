@@ -3,7 +3,7 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
     parse::Parse, parse_macro_input, spanned::Spanned, AttributeArgs, FnArg, Ident, ImplItem,
-    ItemEnum, ItemFn, ItemImpl, Lit, LitStr, Meta, MetaNameValue, NestedMeta, PatType,
+    ItemEnum, ItemFn, ItemImpl, ItemStruct, Lit, LitStr, Meta, MetaNameValue, NestedMeta, PatType,
 };
 
 // TODO: Use explicit trait methods in all quote! macros.
@@ -561,4 +561,20 @@ pub fn derive_choices(item: TokenStream) -> TokenStream {
         }
     }
     .into()
+}
+
+#[proc_macro_derive(CommandL10nProvider)]
+pub fn derive_command_l10n_provider(item: TokenStream) -> TokenStream {
+    let struct_item = parse_macro_input!(item as ItemStruct);
+    let name = struct_item.ident;
+
+    quote! { impl ::tranquil::l10n::CommandL10nProvider for #name {} }.into()
+}
+
+#[proc_macro_derive(Module)]
+pub fn derive_module(item: TokenStream) -> TokenStream {
+    let struct_item = parse_macro_input!(item as ItemStruct);
+    let name = struct_item.ident;
+
+    quote! { impl ::tranquil::module::Module for #name {} }.into()
 }

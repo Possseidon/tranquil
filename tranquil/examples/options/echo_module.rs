@@ -13,22 +13,19 @@ use tranquil::{
     bounded_number, bounded_string,
     command::CommandContext,
     l10n::CommandL10nProvider,
-    macros::{command_provider, slash, Choices},
+    macros::{command_provider, slash},
     module::Module,
     resolve::{
-        DirectoryChannel, Mentionable, NewsChannel, NewsThreadChannel, PartialChannelCategory,
-        PartialDirectoryChannel, PartialNewsChannel, PartialNewsThreadChannel,
-        PartialPrivateChannel, PartialPrivateThreadChannel, PartialPublicThreadChannel,
-        PartialStageChannel, PartialTextChannel, PartialVoiceChannel, PrivateThreadChannel,
-        PublicThreadChannel, StageChannel, TextChannel, VoiceChannel,
+        Choices, DirectoryChannel, Mentionable, NewsChannel, NewsThreadChannel,
+        PartialChannelCategory, PartialDirectoryChannel, PartialNewsChannel,
+        PartialNewsThreadChannel, PartialPrivateChannel, PartialPrivateThreadChannel,
+        PartialPublicThreadChannel, PartialStageChannel, PartialTextChannel, PartialVoiceChannel,
+        PrivateThreadChannel, PublicThreadChannel, StageChannel, TextChannel, VoiceChannel,
     },
 };
 
+#[derive(Module, CommandL10nProvider)]
 pub(crate) struct EchoModule;
-
-impl Module for EchoModule {}
-
-impl CommandL10nProvider for EchoModule {}
 
 #[command_provider]
 impl EchoModule {

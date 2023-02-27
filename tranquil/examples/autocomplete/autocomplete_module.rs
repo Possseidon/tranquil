@@ -7,11 +7,8 @@ use tranquil::{
     module::Module,
 };
 
+#[derive(Module, CommandL10nProvider)]
 pub(crate) struct AutocompleteModule;
-
-impl Module for AutocompleteModule {}
-
-impl CommandL10nProvider for AutocompleteModule {}
 
 impl AutocompleteModule {
     #[autocompleter]

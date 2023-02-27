@@ -7,7 +7,7 @@ pub mod resolve;
 pub mod utils;
 
 pub mod macros {
-    pub use tranquil_macros::*;
+    pub use tranquil_macros::{autocompleter, command_provider, slash};
 }
 
 extern crate self as tranquil;

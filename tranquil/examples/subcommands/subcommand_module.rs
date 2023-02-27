@@ -5,11 +5,8 @@ use tranquil::{
     module::Module,
 };
 
+#[derive(Module, CommandL10nProvider)]
 pub(crate) struct SubcommandModule;
-
-impl Module for SubcommandModule {}
-
-impl CommandL10nProvider for SubcommandModule {}
 
 async fn pong(ctx: CommandContext) -> anyhow::Result<()> {
     ctx.create_response(|response| {
