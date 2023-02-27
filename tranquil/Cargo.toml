@@ -14,6 +14,7 @@ categories = ["api-bindings"]
 anyhow = "1.0"
 async-trait = "0.1.64"
 bounded-integer = { version = "0.5.3", features = ["types"] }
+delegate = "0.9.0"
 dotenvy = "0.15.5"
 enumset = "1.0"
 futures = { version = "0.3.23", default-features = false, features = [

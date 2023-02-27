@@ -166,7 +166,7 @@ impl EchoModule {
     //     ctx: CommandContext,
     //     value: PartialForumChannel,
     // ) -> anyhow::Result<()> {
-    //     create_response(ctx, value).await
+    //     echo(ctx, value).await
     // }
 
     #[slash(rename = "echo channel-id")]
@@ -284,7 +284,7 @@ impl EchoModule {
     //     ctx: CommandContext,
     //     value: ForumChannel,
     // ) -> anyhow::Result<()> {
-    //     create_response(ctx, value).await
+    //     echo(ctx, value).await
     // }
 
     // --- integer
@@ -525,7 +525,7 @@ impl EchoModule {
 }
 
 async fn echo(ctx: CommandContext, value: impl std::fmt::Debug) -> anyhow::Result<()> {
-    ctx.create_response(|response| {
+    ctx.create_interaction_response(|response| {
         response.interaction_response_data(|data| data.content(format!("```rust\n{value:#?}\n```")))
     })
     .await?;
