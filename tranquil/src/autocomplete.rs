@@ -1,6 +1,7 @@
 use std::{pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
+use delegate::delegate;
 use futures::Future;
 use serenity::{
     builder::{CreateApplicationCommandOption, CreateAutocompleteResponse},
@@ -22,13 +23,16 @@ pub struct AutocompleteContext {
 }
 
 impl AutocompleteContext {
-    pub async fn create_response<F>(&self, f: F) -> serenity::Result<()>
-    where
-        F: FnOnce(&mut CreateAutocompleteResponse) -> &mut CreateAutocompleteResponse,
-    {
-        self.interaction
-            .create_autocomplete_response(&self.bot, f)
-            .await
+    delegate! {
+        to self.interaction {
+            pub async fn create_autocomplete_response<F>(
+                &self,
+                [ &self.bot ],
+                f: F,
+            ) -> serenity::Result<()>
+            where
+                F: FnOnce(&mut CreateAutocompleteResponse) -> &mut CreateAutocompleteResponse;
+        }
     }
 }
 

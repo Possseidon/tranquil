@@ -7,6 +7,7 @@ use std::{
 
 use anyhow::bail;
 use async_trait::async_trait;
+use delegate::delegate;
 use futures::Future;
 use serenity::{
     builder::{
@@ -38,79 +39,71 @@ pub struct CommandContext {
 }
 
 impl CommandContext {
-    pub async fn get_response(&self) -> serenity::Result<Message> {
-        self.interaction.get_interaction_response(&self.bot).await
-    }
+    delegate! {
+        to self.interaction {
+            pub async fn get_interaction_response(
+                &self,
+                [ &self.bot ],
+            ) -> serenity::Result<Message>;
 
-    pub async fn create_response<'a, F>(&self, f: F) -> serenity::Result<()>
-    where
-        for<'b> F:
-            FnOnce(&'b mut CreateInteractionResponse<'a>) -> &'b mut CreateInteractionResponse<'a>,
-    {
-        self.interaction
-            .create_interaction_response(&self.bot, f)
-            .await
-    }
+            pub async fn create_interaction_response<'a, F>(
+                &self,
+                [ &self.bot ],
+                f: F,
+            ) -> serenity::Result<()>
+            where
+                for<'b> F: FnOnce(
+                    &'b mut CreateInteractionResponse<'a>,
+                ) -> &'b mut CreateInteractionResponse<'a>;
 
-    pub async fn edit_original_response<F>(&self, f: F) -> serenity::Result<Message>
-    where
-        F: FnOnce(&mut EditInteractionResponse) -> &mut EditInteractionResponse,
-    {
-        self.interaction
-            .edit_original_interaction_response(&self.bot, f)
-            .await
-    }
+            pub async fn edit_original_interaction_response<F>(
+                &self,
+                [ &self.bot ],
+                f: F
+            ) -> serenity::Result<Message>
+            where
+                F: FnOnce(&mut EditInteractionResponse) -> &mut EditInteractionResponse;
 
-    pub async fn delete_original_response(&self) -> serenity::Result<()> {
-        self.interaction
-            .delete_original_interaction_response(&self.bot)
-            .await
-    }
+            pub async fn delete_original_interaction_response(
+                &self,
+                [ &self.bot ],
+            ) -> serenity::Result<()>;
 
-    pub async fn create_followup_message<'a, F>(&self, f: F) -> serenity::Result<Message>
-    where
-        for<'b> F: FnOnce(
-            &'b mut CreateInteractionResponseFollowup<'a>,
-        ) -> &'b mut CreateInteractionResponseFollowup<'a>,
-    {
-        self.interaction.create_followup_message(&self.bot, f).await
-    }
+            pub async fn create_followup_message<'a, F>(
+                &self,
+                [ &self.bot ],
+                f: F
+            ) -> serenity::Result<Message>
+            where
+                for<'b> F: FnOnce(
+                    &'b mut CreateInteractionResponseFollowup<'a>,
+                ) -> &'b mut CreateInteractionResponseFollowup<'a>;
 
-    pub async fn edit_followup_message<'a, F, M: Into<MessageId>>(
-        &self,
-        message_id: M,
-        f: F,
-    ) -> serenity::Result<Message>
-    where
-        for<'b> F: FnOnce(
-            &'b mut CreateInteractionResponseFollowup<'a>,
-        ) -> &'b mut CreateInteractionResponseFollowup<'a>,
-    {
-        self.interaction
-            .edit_followup_message(&self.bot, message_id, f)
-            .await
-    }
+            pub async fn edit_followup_message<'a, F>(
+                &self,
+                [ &self.bot ],
+                message_id: impl Into<MessageId>,
+                f: F,
+            ) -> serenity::Result<Message>
+            where
+                for<'b> F: FnOnce(
+                    &'b mut CreateInteractionResponseFollowup<'a>,
+                ) -> &'b mut CreateInteractionResponseFollowup<'a>;
 
-    pub async fn delete_followup_message<M: Into<MessageId>>(
-        &self,
-        message_id: M,
-    ) -> serenity::Result<()> {
-        self.interaction
-            .delete_followup_message(&self.bot, message_id)
-            .await
-    }
+            pub async fn delete_followup_message(
+                &self,
+                [ &self.bot ],
+                message_id: impl Into<MessageId>,
+            ) -> serenity::Result<()>;
 
-    pub async fn get_followup_message<M: Into<MessageId>>(
-        &self,
-        message_id: M,
-    ) -> serenity::Result<Message> {
-        self.interaction
-            .get_followup_message(&self.bot, message_id)
-            .await
-    }
+            pub async fn get_followup_message(
+                &self,
+                [ &self.bot ],
+                message_id: impl Into<MessageId>,
+            ) -> serenity::Result<Message>;
 
-    pub async fn defer(&self) -> serenity::Result<()> {
-        self.interaction.defer(&self.bot).await
+            pub async fn defer(&self, [ &self.bot ]) -> serenity::Result<()>;
+        }
     }
 }
 

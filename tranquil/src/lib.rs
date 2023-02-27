@@ -2,6 +2,8 @@ pub mod autocomplete;
 pub mod bot;
 pub mod command;
 pub mod l10n;
+pub mod message_component;
+pub mod modal;
 pub mod module;
 pub mod resolve;
 pub mod utils;

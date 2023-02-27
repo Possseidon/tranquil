@@ -18,7 +18,7 @@ impl CommandL10nProvider for ExampleModule {
 }
 
 async fn pong(ctx: CommandContext) -> anyhow::Result<()> {
-    ctx.create_response(|response| {
+    ctx.create_interaction_response(|response| {
         response.interaction_response_data(|data| data.content("Pong!"))
     })
     .await?;

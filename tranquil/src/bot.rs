@@ -16,6 +16,7 @@ use serenity::{
     model::{
         application::{
             command::{Command, CommandOptionType},
+            component::ComponentType,
             interaction::Interaction,
         },
         event::Event,
@@ -34,6 +35,8 @@ use crate::{
         SubcommandMapEntry,
     },
     l10n::{CommandPathRef, L10n},
+    message_component::MessageComponentContext,
+    modal::ModalContext,
     module::Module,
 };
 
@@ -215,6 +218,60 @@ impl Bot {
             println!("Skipping updating of application commands");
         }
     }
+
+    async fn handle_command(&self, ctx: CommandContext) -> anyhow::Result<()> {
+        let command_path = CommandPath::resolve(&ctx.interaction.data);
+
+        match self.command_map.find_command(&command_path) {
+            Some(command) => command.run(ctx).await?,
+            None => {
+                ctx.create_interaction_response(|response| {
+                    response.interaction_response_data(|data| {
+                        data.embed(|embed| {
+                            embed.color(colors::css::DANGER).field(
+                                format!(":x: Unknown command: `/{command_path}`"),
+                                "Bot commands are likely outdated.".to_string(),
+                                false,
+                            )
+                        })
+                        .ephemeral(true)
+                    })
+                })
+                .await?
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_message_component(&self, ctx: MessageComponentContext) -> anyhow::Result<()> {
+        match ctx.interaction.data.component_type {
+            ComponentType::Button => todo!(),
+            ComponentType::SelectMenu => todo!(),
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    async fn handle_autocomplete(&self, ctx: AutocompleteContext) -> anyhow::Result<()> {
+        let command_path = CommandPath::resolve(&ctx.interaction.data);
+
+        match self.command_map.find_command(&command_path) {
+            Some(command) => command.autocomplete(ctx).await?,
+            None => {
+                // Commands are probably outdated... Send an empty autocomplete response.
+                ctx.create_autocomplete_response(|response| response)
+                    .await?
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_modal(&self, _ctx: ModalContext) -> anyhow::Result<()> {
+        todo!()
+    }
 }
 
 type GuildUpdateError = (String, Result<(), serenity::Error>);
@@ -356,50 +413,28 @@ impl EventHandler for Bot {
     async fn interaction_create(&self, bot: Context, interaction: Interaction) {
         async {
             match interaction {
+                Interaction::Ping(_) => {}
                 Interaction::ApplicationCommand(interaction) => {
-                    let command_path = CommandPath::resolve(&interaction.data);
-                    match self.command_map.find_command(&command_path) {
-                        Some(command) => command.run(CommandContext { bot, interaction }).await?,
-                        None => {
-                            interaction
-                                .create_interaction_response(bot, |response| {
-                                    response.interaction_response_data(|data| {
-                                        data.embed(|embed| {
-                                            embed.color(colors::css::DANGER).field(
-                                                format!(":x: Unknown command: `/{command_path}`"),
-                                                "Bot commands are likely outdated.".to_string(),
-                                                false,
-                                            )
-                                        })
-                                        .ephemeral(true)
-                                    })
-                                })
-                                .await?;
-                        }
-                    }
+                    self.handle_command(CommandContext { bot, interaction })
+                        .await?
+                }
+                Interaction::MessageComponent(interaction) => {
+                    self.handle_message_component(MessageComponentContext { bot, interaction })
+                        .await?
                 }
                 Interaction::Autocomplete(interaction) => {
-                    let command_path = CommandPath::resolve(&interaction.data);
-                    match self.command_map.find_command(&command_path) {
-                        Some(command) => {
-                            command
-                                .autocomplete(AutocompleteContext { bot, interaction })
-                                .await?;
-                        }
-                        None => {
-                            // Commands are probably outdated... Send an empty autocomplete response.
-                            interaction
-                                .create_autocomplete_response(bot, |response| response)
-                                .await?;
-                        }
-                    }
+                    self.handle_autocomplete(AutocompleteContext { bot, interaction })
+                        .await?
                 }
-                _ => {}
+                Interaction::ModalSubmit(interaction) => {
+                    self.handle_modal(ModalContext { bot, interaction }).await?
+                }
             }
-            Ok::<(), anyhow::Error>(())
+
+            Ok(())
         }
         .await
-        .unwrap_or_else(|error| {
+        .unwrap_or_else(|error: anyhow::Error| {
             eprintln!("Error creating interaction response:\n{error}");
         });
     }
