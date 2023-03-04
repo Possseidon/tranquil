@@ -1,20 +1,19 @@
 use indoc::indoc;
 use tranquil::{
-    autocomplete::{Autocomplete, AutocompleteContext, Focusable},
-    command::CommandContext,
-    l10n::CommandL10nProvider,
+    autocomplete::{Autocomplete, Focusable},
+    context::{AutocompleteCtx, CommandCtx},
     macros::{autocompleter, command_provider, slash},
     module::Module,
 };
 
-#[derive(Module, CommandL10nProvider)]
+#[derive(Module)]
 pub(crate) struct AutocompleteModule;
 
 impl AutocompleteModule {
     #[autocompleter]
     async fn autocomplete_echo_simple(
         &self,
-        ctx: AutocompleteContext,
+        ctx: AutocompleteCtx,
         value: String,
     ) -> anyhow::Result<()> {
         let you_typed = format!("You typed: {value}");
@@ -28,7 +27,7 @@ impl AutocompleteModule {
     #[autocompleter]
     async fn my_complex_autocompleter(
         &self,
-        ctx: AutocompleteContext,
+        ctx: AutocompleteCtx,
         not_autocompleted: Option<String>,
         autocompleted: Focusable<Option<String>>,
         optional: Option<String>,
@@ -69,7 +68,7 @@ impl AutocompleteModule {
     #[slash(autocomplete)]
     async fn echo_simple(
         &self,
-        ctx: CommandContext,
+        ctx: CommandCtx,
         value: Autocomplete<String>,
     ) -> anyhow::Result<()> {
         ctx.create_interaction_response(|response| {
@@ -83,7 +82,7 @@ impl AutocompleteModule {
     #[slash(autocomplete = "my_complex_autocompleter")]
     async fn echo_complex(
         &self,
-        ctx: CommandContext,
+        ctx: CommandCtx,
         not_autocompleted: String,
         autocompleted: Autocomplete<String>,
         optional: Option<String>,

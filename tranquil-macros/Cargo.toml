@@ -14,6 +14,7 @@ proc-macro = true
 
 [dependencies]
 indoc = "2.0"
+itertools = "0.10.5"
 quote = { version = "1.0", default-features = false }
 syn = { version = "1.0", default-features = false, features = [
     "full",

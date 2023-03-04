@@ -1,23 +1,22 @@
 use async_trait::async_trait;
 use tranquil::{
-    command::CommandContext,
-    l10n::{CommandL10nProvider, L10n, L10nLoadError},
+    context::CommandCtx,
+    l10n::{L10n, L10nLoadError},
     macros::{command_provider, slash},
     module::Module,
     resolve::Choices,
 };
 
-#[derive(Module)]
 pub(crate) struct ExampleModule;
 
 #[async_trait]
-impl CommandL10nProvider for ExampleModule {
+impl Module for ExampleModule {
     async fn l10n(&self) -> Result<L10n, L10nLoadError> {
         L10n::from_yaml_file("tranquil/examples/l10n/example_module_l10n.yaml").await
     }
 }
 
-async fn pong(ctx: CommandContext) -> anyhow::Result<()> {
+async fn pong(ctx: CommandCtx) -> anyhow::Result<()> {
     ctx.create_interaction_response(|response| {
         response.interaction_response_data(|data| data.content("Pong!"))
     })
@@ -29,14 +28,14 @@ async fn pong(ctx: CommandContext) -> anyhow::Result<()> {
 #[allow(unused_variables)]
 impl ExampleModule {
     #[slash]
-    async fn members_add(&self, ctx: CommandContext, member: String) -> anyhow::Result<()> {
+    async fn members_add(&self, ctx: CommandCtx, member: String) -> anyhow::Result<()> {
         pong(ctx).await
     }
 
     #[slash]
     async fn members_color(
         &self,
-        ctx: CommandContext,
+        ctx: CommandCtx,
         member: String,
         color: Color,
     ) -> anyhow::Result<()> {

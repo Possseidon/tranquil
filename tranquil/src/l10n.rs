@@ -3,7 +3,6 @@ use std::{
     iter::zip,
 };
 
-use async_trait::async_trait;
 use enumset::{EnumSet, EnumSetType};
 use serde::{Deserialize, Serialize};
 use serenity::builder::{CreateApplicationCommand, CreateApplicationCommandOption};
@@ -13,15 +12,6 @@ use crate::{
     command::{Command, CommandMap, CommandMapEntry, SubcommandMapEntry},
     resolve::Choices,
 };
-
-pub use tranquil_macros::CommandL10nProvider;
-
-#[async_trait]
-pub trait CommandL10nProvider: Sync {
-    async fn l10n(&self) -> Result<L10n, L10nLoadError> {
-        Ok(L10n::new())
-    }
-}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

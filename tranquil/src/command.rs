@@ -7,105 +7,21 @@ use std::{
 
 use anyhow::bail;
 use async_trait::async_trait;
-use delegate::delegate;
 use futures::Future;
 use serenity::{
-    builder::{
-        CreateApplicationCommand, CreateApplicationCommandOption, CreateInteractionResponse,
-        CreateInteractionResponseFollowup, EditInteractionResponse,
-    },
-    client::Context,
-    model::{
-        application::{
-            command::CommandOptionType,
-            interaction::application_command::{ApplicationCommandInteraction, CommandData},
-        },
-        channel::Message,
-        id::MessageId,
+    builder::{CreateApplicationCommand, CreateApplicationCommandOption},
+    model::application::{
+        command::CommandOptionType, interaction::application_command::CommandData,
     },
 };
 use thiserror::Error;
 
 use crate::{
-    autocomplete::{AutocompleteContext, AutocompleteFunction},
+    autocomplete::AutocompleteFunction,
+    context::{AutocompleteCtx, CommandCtx},
     l10n::L10n,
     module::Module,
 };
-
-#[derive(Clone)]
-pub struct CommandContext {
-    pub bot: Context,
-    pub interaction: ApplicationCommandInteraction,
-}
-
-impl CommandContext {
-    delegate! {
-        to self.interaction {
-            pub async fn get_interaction_response(
-                &self,
-                [ &self.bot ],
-            ) -> serenity::Result<Message>;
-
-            pub async fn create_interaction_response<'a, F>(
-                &self,
-                [ &self.bot ],
-                f: F,
-            ) -> serenity::Result<()>
-            where
-                for<'b> F: FnOnce(
-                    &'b mut CreateInteractionResponse<'a>,
-                ) -> &'b mut CreateInteractionResponse<'a>;
-
-            pub async fn edit_original_interaction_response<F>(
-                &self,
-                [ &self.bot ],
-                f: F
-            ) -> serenity::Result<Message>
-            where
-                F: FnOnce(&mut EditInteractionResponse) -> &mut EditInteractionResponse;
-
-            pub async fn delete_original_interaction_response(
-                &self,
-                [ &self.bot ],
-            ) -> serenity::Result<()>;
-
-            pub async fn create_followup_message<'a, F>(
-                &self,
-                [ &self.bot ],
-                f: F
-            ) -> serenity::Result<Message>
-            where
-                for<'b> F: FnOnce(
-                    &'b mut CreateInteractionResponseFollowup<'a>,
-                ) -> &'b mut CreateInteractionResponseFollowup<'a>;
-
-            pub async fn edit_followup_message<'a, F>(
-                &self,
-                [ &self.bot ],
-                message_id: impl Into<MessageId>,
-                f: F,
-            ) -> serenity::Result<Message>
-            where
-                for<'b> F: FnOnce(
-                    &'b mut CreateInteractionResponseFollowup<'a>,
-                ) -> &'b mut CreateInteractionResponseFollowup<'a>;
-
-            pub async fn delete_followup_message(
-                &self,
-                [ &self.bot ],
-                message_id: impl Into<MessageId>,
-            ) -> serenity::Result<()>;
-
-            pub async fn get_followup_message(
-                &self,
-                [ &self.bot ],
-                message_id: impl Into<MessageId>,
-            ) -> serenity::Result<Message>;
-
-            pub async fn defer(&self, [ &self.bot ]) -> serenity::Result<()>;
-        }
-    }
-}
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CommandPath {
@@ -174,7 +90,7 @@ impl Display for CommandPath {
 }
 
 type CommandFunction<M> = Box<
-    dyn Fn(Arc<M>, CommandContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+    dyn Fn(Arc<M>, CommandCtx) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
         + Send
         + Sync,
 >;
@@ -216,8 +132,8 @@ pub trait Command: Send + Sync {
     fn add_options(&self, l10n: &L10n, command: &mut CreateApplicationCommand);
     fn add_suboptions(&self, l10n: &L10n, option: &mut CreateApplicationCommandOption);
 
-    async fn run(&self, ctx: CommandContext) -> anyhow::Result<()>;
-    async fn autocomplete(&self, ctx: AutocompleteContext) -> anyhow::Result<()>;
+    async fn run(&self, ctx: CommandCtx) -> anyhow::Result<()>;
+    async fn autocomplete(&self, ctx: AutocompleteCtx) -> anyhow::Result<()>;
 }
 
 impl Debug for dyn Command {
@@ -248,7 +164,7 @@ impl<M: Module> Command for ModuleCommand<M> {
         }
     }
 
-    async fn run(&self, ctx: CommandContext) -> anyhow::Result<()> {
+    async fn run(&self, ctx: CommandCtx) -> anyhow::Result<()> {
         (self.command_function)(self.module.clone(), ctx).await
         // TODO: return a different type of error so e.g. invalid parameters can automatically be reported nicely like here:
 
@@ -282,7 +198,7 @@ impl<M: Module> Command for ModuleCommand<M> {
         */
     }
 
-    async fn autocomplete(&self, ctx: AutocompleteContext) -> anyhow::Result<()> {
+    async fn autocomplete(&self, ctx: AutocompleteCtx) -> anyhow::Result<()> {
         if let Some(autocomplete_function) = &self.autocomplete_function {
             autocomplete_function(self.module.clone(), ctx).await
         } else {

@@ -1,4 +1,6 @@
 use std::{
+    collections::{hash_map::Entry, HashMap},
+    mem::take,
     ops::Deref,
     sync::{
         atomic::{self, AtomicBool},
@@ -6,12 +8,13 @@ use std::{
     },
 };
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail, Context};
 use async_trait::async_trait;
 use futures::{future::join_all, join};
+use itertools::chain;
 use serenity::{
     builder::CreateApplicationCommand,
-    client::{Context, EventHandler, RawEventHandler},
+    client::{EventHandler, RawEventHandler},
     http::Http,
     model::{
         application::{
@@ -27,16 +30,12 @@ use serenity::{
     utils::colours as colors,
     Client,
 };
+use uuid::Uuid;
 
 use crate::{
-    autocomplete::AutocompleteContext,
-    command::{
-        CommandContext, CommandMap, CommandMapEntry, CommandMapMergeError, CommandPath,
-        SubcommandMapEntry,
-    },
+    command::{CommandMap, CommandMapEntry, CommandPath, SubcommandMapEntry},
+    context::{AutocompleteCtx, CommandCtx, Ctx, MessageComponentCtx, ModalCtx},
     l10n::{CommandPathRef, L10n},
-    message_component::MessageComponentContext,
-    modal::ModalContext,
     module::Module,
 };
 
@@ -48,10 +47,13 @@ pub enum ApplicationCommandUpdate {
     Only(Vec<GuildId>),
 }
 
+type CustomIdMap = HashMap<Uuid, Arc<dyn Module>>;
+
 pub struct Bot {
     already_connected: AtomicBool,
     application_command_update: Option<ApplicationCommandUpdate>,
     command_map: CommandMap,
+    custom_id_map: CustomIdMap,
     modules: Vec<Arc<dyn Module>>,
     l10n: L10n,
 }
@@ -62,6 +64,7 @@ impl Default for Bot {
             already_connected: Default::default(),
             application_command_update: Some(ApplicationCommandUpdate::default()),
             command_map: Default::default(),
+            custom_id_map: Default::default(),
             modules: Default::default(),
             l10n: Default::default(),
         }
@@ -81,11 +84,9 @@ impl Bot {
         self
     }
 
-    pub fn register(mut self, module: impl Module + 'static) -> Result<Self, CommandMapMergeError> {
-        let module = Arc::new(module);
-        self.command_map = self.command_map.merge(module.clone().command_map()?)?;
-        self.modules.push(module);
-        Ok(self)
+    pub fn register(mut self, module: impl Module + 'static) -> Self {
+        self.modules.push(Arc::new(module));
+        self
     }
 
     pub async fn run(mut self, discord_token: impl AsRef<str>) -> anyhow::Result<()> {
@@ -95,7 +96,9 @@ impl Bot {
         //     err
         // });
 
-        self.load_translations().await?;
+        self.command_map = self.load_command_map()?;
+        self.custom_id_map = self.load_custom_id_map()?;
+        self.l10n = self.load_l10n().await?;
 
         let intents = merge_intents(self.modules.iter().map(Deref::deref));
 
@@ -108,22 +111,41 @@ impl Bot {
         Ok(())
     }
 
+    fn load_command_map(&self) -> anyhow::Result<CommandMap> {
+        self.modules.iter().try_fold(
+            Default::default(),
+            |command_map, module| -> anyhow::Result<CommandMap> {
+                Ok(command_map.merge(module.clone().command_map()?)?)
+            },
+        )
+    }
+
+    fn load_custom_id_map(&self) -> anyhow::Result<CustomIdMap> {
+        let mut custom_id_map = CustomIdMap::new();
+        for module in &self.modules {
+            for &uuid in chain(module.interaction_uuids(), module.modal_uuids()) {
+                match custom_id_map.entry(uuid) {
+                    Entry::Vacant(entry) => entry.insert(module.clone()),
+                    Entry::Occupied(_) => bail!("duplicate interaction uuid: {uuid}"),
+                };
+            }
+        }
+        Ok(custom_id_map)
+    }
+
+    async fn load_l10n(&self) -> anyhow::Result<L10n> {
+        L10n::merge_results(join_all(self.modules.iter().map(|module| module.l10n())).await)
+            .map_err(|error| {
+                eprintln!("{error}");
+                anyhow!("invalid l10n")
+            })
+    }
+
     pub async fn run_until_ctrl_c(self, discord_token: impl AsRef<str>) -> anyhow::Result<()> {
         tokio::select! {
             result = self.run(discord_token) => result?,
             result = tokio::signal::ctrl_c() => result?,
         }
-
-        Ok(())
-    }
-
-    async fn load_translations(&mut self) -> anyhow::Result<()> {
-        self.l10n =
-            L10n::merge_results(join_all(self.modules.iter().map(|module| module.l10n())).await)
-                .map_err(|error| {
-                    eprintln!("{error}");
-                    anyhow!("invalid l10n")
-                })?;
 
         Ok(())
     }
@@ -219,7 +241,7 @@ impl Bot {
         }
     }
 
-    async fn handle_command(&self, ctx: CommandContext) -> anyhow::Result<()> {
+    async fn handle_command(&self, ctx: CommandCtx) -> anyhow::Result<()> {
         let command_path = CommandPath::resolve(&ctx.interaction.data);
 
         match self.command_map.find_command(&command_path) {
@@ -244,17 +266,38 @@ impl Bot {
         Ok(())
     }
 
-    async fn handle_message_component(&self, ctx: MessageComponentContext) -> anyhow::Result<()> {
+    fn parse_custom_id<'custom_id>(
+        &self,
+        custom_id: &'custom_id str,
+    ) -> anyhow::Result<(Uuid, &'custom_id str)> {
+        custom_id
+            .split_once(' ')
+            .ok_or_else(|| anyhow!("invalid custom_id: {custom_id}"))
+            .and_then(|(uuid, state)| {
+                Ok((
+                    Uuid::parse_str(uuid)
+                        .with_context(|| format!("invalid custom_id uuid: {uuid}"))?,
+                    state,
+                ))
+            })
+    }
+
+    async fn handle_message_component(&self, mut ctx: MessageComponentCtx) -> anyhow::Result<()> {
         match ctx.interaction.data.component_type {
-            ComponentType::Button => todo!(),
-            ComponentType::SelectMenu => todo!(),
+            ComponentType::Button | ComponentType::SelectMenu => {
+                let custom_id = take(&mut ctx.interaction.data.custom_id);
+                let (uuid, state) = self.parse_custom_id(&custom_id)?;
+                self.resolve_custom_id_module(uuid)?
+                    .interact(uuid, state, ctx)
+                    .await?;
+            }
             _ => {}
         }
 
         Ok(())
     }
 
-    async fn handle_autocomplete(&self, ctx: AutocompleteContext) -> anyhow::Result<()> {
+    async fn handle_autocomplete(&self, ctx: AutocompleteCtx) -> anyhow::Result<()> {
         let command_path = CommandPath::resolve(&ctx.interaction.data);
 
         match self.command_map.find_command(&command_path) {
@@ -269,8 +312,18 @@ impl Bot {
         Ok(())
     }
 
-    async fn handle_modal(&self, _ctx: ModalContext) -> anyhow::Result<()> {
-        todo!()
+    async fn handle_modal(&self, mut ctx: ModalCtx) -> anyhow::Result<()> {
+        let custom_id = take(&mut ctx.interaction.data.custom_id);
+        let (uuid, state) = self.parse_custom_id(&custom_id)?;
+        self.resolve_custom_id_module(uuid)?
+            .submit(uuid, state, ctx)
+            .await
+    }
+
+    fn resolve_custom_id_module(&self, uuid: Uuid) -> anyhow::Result<&Arc<dyn Module>> {
+        self.custom_id_map
+            .get(&uuid)
+            .ok_or_else(|| anyhow!("no module that handles the custom_id uuid {uuid}"))
     }
 }
 
@@ -402,32 +455,31 @@ async fn update_guilds(
 
 #[async_trait]
 impl EventHandler for Bot {
-    async fn ready(&self, bot: Context, data_about_bot: Ready) {
+    async fn ready(&self, bot: serenity::client::Context, data_about_bot: Ready) {
         if self.notify_connect(&data_about_bot.user.name, data_about_bot.guilds.len()) {
             self.update_application_commands(&bot.http, &data_about_bot.guilds)
                 .await;
         }
         println!("Ready!");
+        println!();
     }
 
-    async fn interaction_create(&self, bot: Context, interaction: Interaction) {
+    async fn interaction_create(&self, bot: serenity::client::Context, interaction: Interaction) {
         async {
             match interaction {
                 Interaction::Ping(_) => {}
                 Interaction::ApplicationCommand(interaction) => {
-                    self.handle_command(CommandContext { bot, interaction })
-                        .await?
+                    self.handle_command(Ctx { bot, interaction }).await?
                 }
                 Interaction::MessageComponent(interaction) => {
-                    self.handle_message_component(MessageComponentContext { bot, interaction })
+                    self.handle_message_component(Ctx { bot, interaction })
                         .await?
                 }
                 Interaction::Autocomplete(interaction) => {
-                    self.handle_autocomplete(AutocompleteContext { bot, interaction })
-                        .await?
+                    self.handle_autocomplete(Ctx { bot, interaction }).await?
                 }
                 Interaction::ModalSubmit(interaction) => {
-                    self.handle_modal(ModalContext { bot, interaction }).await?
+                    self.handle_modal(Ctx { bot, interaction }).await?
                 }
             }
 
@@ -444,7 +496,7 @@ impl EventHandler for Bot {
 
 #[async_trait]
 impl RawEventHandler for Bot {
-    async fn raw_event(&self, _bot: Context, event: Event) {
+    async fn raw_event(&self, _bot: serenity::client::Context, event: Event) {
         println!("{event:#?}");
     }
 }

@@ -1,43 +1,19 @@
 use std::{pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
-use delegate::delegate;
 use futures::Future;
 use serenity::{
-    builder::{CreateApplicationCommandOption, CreateAutocompleteResponse},
-    client::Context,
-    model::application::{
-        command::CommandOptionType, interaction::autocomplete::AutocompleteInteraction,
-    },
+    builder::CreateApplicationCommandOption, model::application::command::CommandOptionType,
 };
 
 use crate::{
+    context::AutocompleteCtx,
     l10n::L10n,
     resolve::{Resolve, ResolveContext, ResolveResult},
 };
 
-#[derive(Clone)]
-pub struct AutocompleteContext {
-    pub bot: Context,
-    pub interaction: AutocompleteInteraction,
-}
-
-impl AutocompleteContext {
-    delegate! {
-        to self.interaction {
-            pub async fn create_autocomplete_response<F>(
-                &self,
-                [ &self.bot ],
-                f: F,
-            ) -> serenity::Result<()>
-            where
-                F: FnOnce(&mut CreateAutocompleteResponse) -> &mut CreateAutocompleteResponse;
-        }
-    }
-}
-
 pub(crate) type AutocompleteFunction<M> = Box<
-    dyn Fn(Arc<M>, AutocompleteContext) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+    dyn Fn(Arc<M>, AutocompleteCtx) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
         + Send
         + Sync,
 >;

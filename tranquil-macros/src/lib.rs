@@ -1,9 +1,11 @@
 use indoc::indoc;
+use itertools::Itertools;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    parse::Parse, parse_macro_input, spanned::Spanned, AttributeArgs, FnArg, Ident, ImplItem,
-    ItemEnum, ItemFn, ItemImpl, ItemStruct, Lit, LitStr, Meta, MetaNameValue, NestedMeta, PatType,
+    parse::Parse, parse_macro_input, spanned::Spanned, AttributeArgs, Expr, ExprLit, ExprRange,
+    FnArg, Ident, ImplItem, ItemEnum, ItemFn, ItemImpl, ItemStruct, Lit, LitStr, Meta,
+    MetaNameValue, NestedMeta, PatType, RangeLimits, TypePath,
 };
 
 // TODO: Use explicit trait methods in all quote! macros.
@@ -242,7 +244,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
         .sig
         .inputs
         .iter()
-        .skip(2) // TODO: Don't just skip &self and CommandContext.
+        .skip(2) // TODO: Don't just skip &self and CommandCtx.
         .filter_map(|input| match input {
             FnArg::Receiver(_) => None,
             FnArg::Typed(pat_type) => Some(pat_type),
@@ -418,7 +420,7 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
         .sig
         .inputs
         .iter()
-        .skip(2) // TODO: Don't just skip &self and AutocompleteContext.
+        .skip(2) // TODO: Don't just skip &self and AutocompleteCtx.
         .filter_map(|input| match input {
             FnArg::Receiver(_) => None,
             FnArg::Typed(pat_type) => Some(pat_type),
@@ -458,7 +460,7 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         async fn #name(
             &self,
-            mut ctx: ::tranquil::autocomplete::AutocompleteContext,
+            mut ctx: ::tranquil::context::AutocompleteCtx,
         ) -> ::tranquil::anyhow::Result<()> {
             let mut options = ::tranquil::resolve::find_options(
                 [#(#parameter_names),*],
@@ -563,18 +565,527 @@ pub fn derive_choices(item: TokenStream) -> TokenStream {
     .into()
 }
 
-#[proc_macro_derive(CommandL10nProvider)]
-pub fn derive_command_l10n_provider(item: TokenStream) -> TokenStream {
-    let struct_item = parse_macro_input!(item as ItemStruct);
-    let name = struct_item.ident;
-
-    quote! { impl ::tranquil::l10n::CommandL10nProvider for #name {} }.into()
-}
-
 #[proc_macro_derive(Module)]
 pub fn derive_module(item: TokenStream) -> TokenStream {
     let struct_item = parse_macro_input!(item as ItemStruct);
     let name = struct_item.ident;
 
     quote! { impl ::tranquil::module::Module for #name {} }.into()
+}
+
+fn missing_uuid(span: &impl Spanned, uuid_attr_name: &str) -> TokenStream {
+    syn::Error::new(
+        span.span(),
+        format!(r#"missing uuid: `#[{uuid_attr_name}("00000000-0000-0000-0000-000000000000")]`"#),
+    )
+    .into_compile_error()
+    .into()
+}
+
+fn multiple_uuids(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(span.span(), "only one uuid must be specified")
+        .into_compile_error()
+        .into()
+}
+
+fn invalid_uuid(span: &impl Spanned, uuid_attr_name: &str) -> TokenStream {
+    syn::Error::new(
+        span.span(),
+        format!(r#"uuid must be a string: `#[{uuid_attr_name}("00000000-0000-0000-0000-000000000000")]`"#),
+    )
+    .into_compile_error()
+    .into()
+}
+
+fn missing_module(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(span.span(), "missing module: `#[module(MyModule)]`")
+        .into_compile_error()
+        .into()
+}
+
+fn multiple_modules(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(span.span(), "only one module must be specified")
+        .into_compile_error()
+        .into()
+}
+
+fn invalid_module(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(
+        span.span(),
+        r#"module must be a type: `#[module(MyModule)]`"#,
+    )
+    .into_compile_error()
+    .into()
+}
+
+fn missing_option(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(span.span(), r#"missing option: `#[option("My Option")]`"#)
+        .into_compile_error()
+        .into()
+}
+
+fn multiple_options(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(span.span(), "only one option must be specified per variant")
+        .into_compile_error()
+        .into()
+}
+
+fn invalid_option(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(
+        span.span(),
+        indoc! {r#"
+            valid options:
+                `#[option("label")]`
+                `#[option("label", default)]`
+                `#[option("label", "description")]`
+                `#[option("label", "description", default)]`
+                `#[option('🟥', "label")]`
+                `#[option('🟥', "label", default)]`
+                `#[option('🟥', "label", "description")]`
+                `#[option('🟥', "label", "description", default)]`
+        "#},
+    )
+    .into_compile_error()
+    .into()
+}
+
+fn multiple_default_options(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(span.span(), "only one option can be the default")
+        .into_compile_error()
+        .into()
+}
+
+fn multiple_options_count(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(span.span(), "only one option count must be specified")
+        .into_compile_error()
+        .into()
+}
+
+fn invalid_options_count(span: &impl Spanned) -> TokenStream {
+    syn::Error::new(
+        span.span(),
+        indoc! {r#"
+            options count must be an integer or range:
+                `#[options_count(4)]`
+                `#[options_count(2..=5)]`
+                `#[options_count(..=3)]`
+                `#[options_count(3..=)]`
+        "#},
+    )
+    .into_compile_error()
+    .into()
+}
+
+#[proc_macro_derive(SelectMenuChoice, attributes(choice_uuid, module, option))]
+pub fn derive_select_menu_choice(item: TokenStream) -> TokenStream {
+    let mut errors: Vec<TokenStream> = vec![];
+
+    let enum_item = parse_macro_input!(item as ItemEnum);
+
+    let name = &enum_item.ident;
+
+    let SelectMenu {
+        module,
+        uuid,
+        default_option,
+        options,
+    } = match parse_select_menu_enum(&enum_item, "choice_uuid", &mut errors) {
+        Ok(menu) => menu,
+        Err(error) => return error,
+    };
+
+    let choices = options
+        .iter()
+        .map(|SelectMenuOption { name, .. }| quote! { Self::#name, });
+
+    let default_choice = if let Some(name) = default_option {
+        quote! { ::std::option::Option::Some(Self::#name) }
+    } else {
+        quote! { ::std::option::Option::None }
+    };
+
+    let map_to_select_menu_option = options.iter().map(
+        |SelectMenuOption {
+             name,
+             emoji,
+             label,
+             description,
+             default,
+         }| {
+            let emoji = if let Some(emoji) = emoji {
+                quote! { ::std::option::Option::Some(#emoji.into()) }
+            } else {
+                quote! { ::std::option::Option::None }
+            };
+
+            let description = if let Some(description) = description {
+                quote! { #description }
+            } else {
+                quote! { "" }
+            };
+
+            quote! {
+                Self::#name => SelectMenuOption {
+                    emoji: #emoji,
+                    label: #label.to_string(),
+                    description: #description.to_string(),
+                    default: #default,
+                },
+            }
+        },
+    );
+
+    let custom_id_map = options
+        .iter()
+        .enumerate()
+        .map(|(i, SelectMenuOption { name, .. })| {
+            let i = i.to_string();
+            quote! { #i => ::std::result::Result::Ok(Self::#name), }
+        });
+
+    let mut result = TokenStream::from(quote! {
+        impl ::tranquil::select_menu::SelectMenuChoice for #name {
+            type Module = #module;
+
+            const UUID: Uuid = uuid!(#uuid);
+            const CHOICES: &'static [Self] = &[ #( #choices )* ];
+            const DEFAULT_CHOICE: ::std::option::Option<Self> = #default_choice;
+
+            fn create() -> ::tranquil::serenity::builder::CreateSelectMenu {
+                ::tranquil::select_menu::SelectMenu::new(
+                    Self::CHOICES.iter().map(|choice| match choice {
+                        #( #map_to_select_menu_option )*
+                    })
+                )
+                .create(&::tranquil::select_menu::SelectHandler::<Self>::default())
+            }
+
+            fn from_value(value: &str) -> ::tranquil::anyhow::Result<Self> {
+                match value {
+                    #( #custom_id_map )*
+                    _ => ::tranquil::anyhow::bail!("invalid select menu value"),
+                }
+            }
+        }
+    });
+    result.extend(errors);
+    result
+}
+
+#[proc_macro_derive(SelectMenuOptions, attributes(options_uuid, options_count, option))]
+pub fn derive_select_menu_options(item: TokenStream) -> TokenStream {
+    let mut errors: Vec<TokenStream> = vec![];
+
+    let enum_item = parse_macro_input!(item as ItemEnum);
+
+    let name = &enum_item.ident;
+
+    let SelectMenu {
+        module,
+        uuid,
+        default_option,
+        options,
+    } = match parse_select_menu_enum(&enum_item, "options_uuid", &mut errors) {
+        Ok(menu) => menu,
+        Err(error) => return error,
+    };
+
+    let mut options_count_attr = None;
+    for attr in &enum_item.attrs {
+        if attr.path.is_ident("options_count") {
+            if options_count_attr.is_none() {
+                options_count_attr = Some(attr);
+            } else {
+                errors.push(multiple_options_count(attr));
+            }
+        }
+    }
+
+    let (min_count, max_count) = match options_count_attr {
+        Some(options_range_attr) => {
+            let Ok(options_count_expr) = options_range_attr.parse_args::<Expr>() else {
+                return invalid_options_count(options_range_attr);
+            };
+
+            match options_count_expr {
+                Expr::Lit(ExprLit {
+                    lit: Lit::Int(int), ..
+                }) => (Some(int.clone()), Some(int)),
+                Expr::Range(ExprRange {
+                    from,
+                    limits: RangeLimits::Closed(_),
+                    to,
+                    ..
+                }) => (
+                    match from {
+                        Some(value) => match *value {
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Int(int), ..
+                            }) => Some(int),
+                            _ => return invalid_options_count(&options_count_attr),
+                        },
+                        None => None,
+                    },
+                    match to {
+                        Some(value) => match *value {
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Int(int), ..
+                            }) => Some(int),
+                            _ => return invalid_options_count(&options_count_attr),
+                        },
+                        None => None,
+                    },
+                ),
+                _ => return invalid_options_count(&options_count_attr),
+            }
+        }
+        None => (None, None),
+    };
+
+    let default_choice = if let Some(name) = default_option {
+        quote! { ::std::option::Option::Some(Self::#name) }
+    } else {
+        quote! { ::std::option::Option::None }
+    };
+
+    let map_to_select_menu_option = options.iter().map(
+        |SelectMenuOption {
+             name,
+             emoji,
+             label,
+             description,
+             default,
+         }| {
+            let emoji = if let Some(emoji) = emoji {
+                quote! { ::std::option::Option::Some(#emoji.into()) }
+            } else {
+                quote! { ::std::option::Option::None }
+            };
+
+            let description = if let Some(description) = description {
+                quote! { #description }
+            } else {
+                quote! { "" }
+            };
+
+            quote! {
+                Self::#name => SelectMenuOption {
+                    emoji: #emoji,
+                    label: #label.to_string(),
+                    description: #description.to_string(),
+                    default: #default,
+                },
+            }
+        },
+    );
+
+    let custom_id_map = options
+        .iter()
+        .enumerate()
+        .map(|(i, SelectMenuOption { name, .. })| {
+            let i = i.to_string();
+            quote! { #i => ::std::result::Result::Ok(Self::#name), }
+        });
+
+    let min_count = if let Some(min_count) = min_count {
+        quote! { #min_count }
+    } else {
+        quote! { 0 }
+    };
+    let max_count = if let Some(max_count) = max_count {
+        quote! { #max_count }
+    } else {
+        quote! { EnumSet::<Self>::variant_count().into() }
+    };
+
+    let mut result = TokenStream::from(quote! {
+        impl ::tranquil::select_menu::SelectMenuOptions for #name {
+            type Module = #module;
+
+            const UUID: Uuid = uuid!(#uuid);
+            const DEFAULT_OPTION: ::std::option::Option<Self> = #default_choice;
+
+            fn create_multi() -> ::tranquil::serenity::builder::CreateSelectMenu {
+                ::tranquil::select_menu::SelectMenu::new(
+                    ::tranquil::enumset::EnumSet::<Self>::all().iter().map(|choice| match choice {
+                        #( #map_to_select_menu_option )*
+                    })
+                )
+                .min_values(#min_count)
+                .max_values(#max_count)
+                .create(&::tranquil::select_menu::MultiSelectHandler::<Self>::default())
+            }
+
+            fn from_values(values: &[String]) -> ::tranquil::anyhow::Result<::tranquil::enumset::EnumSet<Self>> {
+                values.iter()
+                    .map(|option| match option.as_str() {
+                        #( #custom_id_map )*
+                        _ => ::tranquil::anyhow::bail!("invalid select menu value"),
+                    })
+                    .collect()
+            }
+        }
+    });
+    result.extend(errors);
+    result
+}
+
+struct SelectMenu<'a> {
+    module: TypePath,
+    uuid: LitStr,
+    default_option: Option<&'a Ident>,
+    options: Vec<SelectMenuOption<'a>>,
+}
+
+struct SelectMenuOption<'a> {
+    name: &'a Ident,
+    emoji: Option<syn::LitChar>,
+    label: LitStr,
+    description: Option<LitStr>,
+    default: bool,
+}
+
+fn parse_select_menu_enum<'a>(
+    enum_item: &'a ItemEnum,
+    uuid_attr_name: &str,
+    errors: &mut Vec<TokenStream>,
+) -> Result<SelectMenu<'a>, TokenStream> {
+    let mut uuid_attr = None;
+    for attr in &enum_item.attrs {
+        if attr.path.is_ident(uuid_attr_name) {
+            if uuid_attr.is_none() {
+                uuid_attr = Some(attr);
+            } else {
+                errors.push(multiple_uuids(attr));
+            }
+        }
+    }
+
+    let Some(uuid_attr) = uuid_attr else {
+        return Err(missing_uuid(&enum_item.ident, uuid_attr_name))
+    };
+
+    let Ok(uuid) = uuid_attr.parse_args::<LitStr>() else {
+        return Err(invalid_uuid(&uuid_attr.path, uuid_attr_name));
+    };
+
+    let mut module_attr = None;
+    for attr in &enum_item.attrs {
+        if attr.path.is_ident("module") {
+            if module_attr.is_none() {
+                module_attr = Some(attr);
+            } else {
+                errors.push(multiple_modules(attr));
+            }
+        }
+    }
+
+    let Some(module_attr) = module_attr else {
+        return Err(missing_module(&enum_item.ident))
+    };
+
+    let Ok(module) = module_attr.parse_args::<TypePath>() else {
+        return Err(invalid_module(&module_attr.path));
+    };
+
+    let mut default_option = None;
+    let mut options = vec![];
+
+    for variant in &enum_item.variants {
+        let mut option_attr = None;
+
+        for attr in &variant.attrs {
+            if attr.path.is_ident("option") {
+                if option_attr.is_none() {
+                    option_attr = Some(attr);
+                } else {
+                    errors.push(multiple_options(attr));
+                }
+            }
+        }
+
+        let Some(option_attr) = option_attr else {
+            return Err(missing_option(variant));
+        };
+
+        let Ok(Meta::List(meta_list)) = option_attr.parse_meta() else {
+            return Err(invalid_option(option_attr));
+        };
+
+        let meta = meta_list.nested.iter().collect_vec();
+        let (emoji, label, description, default) = match &meta[..] {
+            [NestedMeta::Lit(Lit::Str(label))] => (None, label.clone(), None, false),
+
+            [NestedMeta::Lit(Lit::Str(label)), NestedMeta::Meta(Meta::Path(default_path))]
+                if default_path.is_ident("default") =>
+            {
+                (None, label.clone(), None, true)
+            }
+
+            [NestedMeta::Lit(Lit::Str(label)), NestedMeta::Lit(Lit::Str(description))] => {
+                (None, label.clone(), Some(description.clone()), false)
+            }
+
+            [NestedMeta::Lit(Lit::Str(label)), NestedMeta::Lit(Lit::Str(description)), NestedMeta::Meta(Meta::Path(default_path))]
+                if default_path.is_ident("default") =>
+            {
+                (None, label.clone(), Some(description.clone()), true)
+            }
+
+            [NestedMeta::Lit(Lit::Char(emoji)), NestedMeta::Lit(Lit::Str(label))] => {
+                (Some(emoji.clone()), label.clone(), None, false)
+            }
+
+            [NestedMeta::Lit(Lit::Char(emoji)), NestedMeta::Lit(Lit::Str(label)), NestedMeta::Meta(Meta::Path(default_path))]
+                if default_path.is_ident("default") =>
+            {
+                (Some(emoji.clone()), label.clone(), None, true)
+            }
+
+            [NestedMeta::Lit(Lit::Char(emoji)), NestedMeta::Lit(Lit::Str(label)), NestedMeta::Lit(Lit::Str(description))] => {
+                (
+                    Some(emoji.clone()),
+                    label.clone(),
+                    Some(description.clone()),
+                    false,
+                )
+            }
+
+            [NestedMeta::Lit(Lit::Char(emoji)), NestedMeta::Lit(Lit::Str(label)), NestedMeta::Lit(Lit::Str(description)), NestedMeta::Meta(Meta::Path(default_path))]
+                if default_path.is_ident("default") =>
+            {
+                (
+                    Some(emoji.clone()),
+                    label.clone(),
+                    Some(description.clone()),
+                    true,
+                )
+            }
+
+            _ => return Err(invalid_option(option_attr)),
+        };
+
+        if default {
+            if default_option.is_none() {
+                default_option = Some(&variant.ident);
+            } else {
+                return Err(multiple_default_options(&meta_list));
+            }
+        }
+
+        options.push(SelectMenuOption {
+            name: &variant.ident,
+            emoji,
+            label,
+            description,
+            default,
+        });
+    }
+
+    Ok(SelectMenu {
+        module,
+        uuid,
+        default_option,
+        options,
+    })
 }
