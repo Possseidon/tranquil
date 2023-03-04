@@ -14,6 +14,11 @@ pub mod macros {
 
 extern crate self as tranquil;
 
+// Re-exports for macros
+
+#[doc(hidden)]
 pub use anyhow;
+#[doc(hidden)]
 pub use async_trait::async_trait;
+#[doc(hidden)]
 pub use serenity;
