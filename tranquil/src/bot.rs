@@ -435,7 +435,9 @@ impl EventHandler for Bot {
         }
         .await
         .unwrap_or_else(|error: anyhow::Error| {
-            eprintln!("Error creating interaction response:\n{error}");
+            let error = error.context("error during interaction");
+            eprintln!(" ⚠  {:?}", error);
+            eprintln!();
         });
     }
 }
