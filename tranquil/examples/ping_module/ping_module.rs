@@ -1,17 +1,16 @@
 use tranquil::{
-    command::CommandContext,
-    l10n::CommandL10nProvider,
+    context::CommandCtx,
     macros::{command_provider, slash},
     module::Module,
 };
 
-#[derive(Module, CommandL10nProvider)]
+#[derive(Module)]
 pub(crate) struct PingModule;
 
 #[command_provider]
 impl PingModule {
     #[slash]
-    async fn ping(&self, ctx: CommandContext) -> anyhow::Result<()> {
+    async fn ping(&self, ctx: CommandCtx) -> anyhow::Result<()> {
         ctx.create_interaction_response(|response| {
             response.interaction_response_data(|data| data.content("Pong!"))
         })

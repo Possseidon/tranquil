@@ -11,7 +11,7 @@ async fn main() -> anyhow::Result<()> {
 
     Bot::new()
         .application_command_update(debug_guilds_from_env()?)
-        .register(example_module::ExampleModule)?
+        .register(example_module::ExampleModule)
         .run_until_ctrl_c(discord_token_from_env()?)
         .await
 }

@@ -3,7 +3,7 @@ use tranquil::{
     utils::{debug_guilds_from_env, discord_token_from_env, dotenv_if_exists},
 };
 
-mod autocomplete_module;
+mod interaction_module;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -11,7 +11,7 @@ async fn main() -> anyhow::Result<()> {
 
     Bot::new()
         .application_command_update(debug_guilds_from_env()?)
-        .register(autocomplete_module::AutocompleteModule)
+        .register(interaction_module::InteractionModule)
         .run_until_ctrl_c(discord_token_from_env()?)
         .await
 }
