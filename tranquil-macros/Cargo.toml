@@ -17,6 +17,7 @@ indoc = "2.0"
 itertools = "0.10.5"
 quote = { version = "1.0", default-features = false }
 syn = { version = "2.0", default-features = false, features = [
+    "clone-impls",
     "full",
     "parsing",
     "printing",
