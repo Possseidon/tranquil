@@ -3,9 +3,9 @@ use itertools::Itertools;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
-    parse::Parse, parse_macro_input, spanned::Spanned, AttributeArgs, Expr, ExprLit, ExprRange,
-    FnArg, Ident, ImplItem, ItemEnum, ItemFn, ItemImpl, ItemStruct, Lit, LitStr, Meta,
-    MetaNameValue, NestedMeta, PatType, RangeLimits, TypePath,
+    parse::Parse, parse_macro_input, punctuated::Punctuated, spanned::Spanned, Expr, ExprLit,
+    ExprPath, ExprRange, FnArg, Ident, ImplItem, ItemEnum, ItemFn, ItemImpl, ItemStruct, Lit,
+    LitChar, LitStr, Meta, MetaNameValue, PatType, RangeLimits, Token, TypePath,
 };
 
 // TODO: Use explicit trait methods in all quote! macros.
@@ -31,6 +31,8 @@ enum Autocomplete {
     DefaultName,
     CustomName(Ident),
 }
+
+// TODO: Consider implementing syn's Parse trait for this
 
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 struct SlashAttributes<'a> {
@@ -160,7 +162,8 @@ fn invalid_autocomplete_ident(span: &impl Spanned) -> TokenStream {
 pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut errors = vec![];
 
-    let nested_metas = parse_macro_input!(attr as AttributeArgs);
+    let nested_metas =
+        parse_macro_input!(attr with Punctuated::<Meta, Token![,]>::parse_terminated);
 
     let mut item_fn = parse_macro_input!(item as ItemFn);
     let name = item_fn.sig.ident;
@@ -169,13 +172,16 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let attributes = {
         let mut attributes = SlashAttributes::default();
-        for nested_meta in nested_metas.iter() {
+        for nested_meta in &nested_metas {
             match nested_meta {
-                NestedMeta::Meta(Meta::NameValue(MetaNameValue { path, lit, .. })) => {
+                Meta::NameValue(MetaNameValue { path, value, .. }) => {
                     let ident = path.get_ident();
                     if ident.map_or(false, |ident| ident == "rename") {
-                        match lit {
-                            Lit::Str(lit_str) => {
+                        match value {
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Str(lit_str),
+                                ..
+                            }) => {
                                 if attributes.rename.is_some() {
                                     errors.push(multiple_renames(&nested_meta));
                                 } else {
@@ -185,11 +191,14 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                                     }
                                 }
                             }
-                            _ => errors.push(invalid_rename_literal(&lit)),
+                            _ => errors.push(invalid_rename_literal(&value)),
                         }
                     } else if ident.map_or(false, |ident| ident == "autocomplete") {
-                        match lit {
-                            Lit::Str(lit_str) => {
+                        match value {
+                            Expr::Lit(ExprLit {
+                                lit: Lit::Str(lit_str),
+                                ..
+                            }) => {
                                 if attributes.autocomplete.is_some() {
                                     errors.push(multiple_autocompletes(&nested_meta));
                                 } else {
@@ -198,17 +207,17 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                                             attributes.autocomplete =
                                                 Some(Autocomplete::CustomName(ident))
                                         }
-                                        Err(_) => errors.push(invalid_autocomplete_ident(&lit)),
+                                        Err(_) => errors.push(invalid_autocomplete_ident(&value)),
                                     }
                                 }
                             }
-                            _ => errors.push(invalid_autocomplete_ident(&lit)),
+                            _ => errors.push(invalid_autocomplete_ident(&value)),
                         }
                     } else {
                         errors.push(invalid_attribute(&nested_meta));
                     }
                 }
-                NestedMeta::Meta(Meta::Path(path)) => {
+                Meta::Path(path) => {
                     let ident = path.get_ident();
                     if ident.map_or(false, |ident| ident == "default") {
                         attributes.default = ident;
@@ -237,7 +246,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
         });
 
     if let (Some(ident), CommandPath::Command { .. }) = (attributes.default, &command_path) {
-        errors.push(default_on_base_command(&ident));
+        errors.push(default_on_base_command(ident));
     }
 
     let typed_parameters = item_fn
@@ -402,7 +411,8 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut errors = vec![];
 
-    let nested_metas = parse_macro_input!(attr as AttributeArgs);
+    let nested_metas =
+        parse_macro_input!(attr with Punctuated::<Meta, Token![,]>::parse_terminated);
 
     if let Some(meta) = nested_metas.first() {
         errors.push(TokenStream::from(
@@ -480,7 +490,8 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn command_provider(attr: TokenStream, item: TokenStream) -> TokenStream {
     // TODO: Deduplicate code
 
-    let nested_metas = parse_macro_input!(attr as AttributeArgs);
+    let nested_metas =
+        parse_macro_input!(attr with Punctuated::<Meta, Token![,]>::parse_terminated);
 
     let mut errors = vec![];
 
@@ -498,7 +509,7 @@ pub fn command_provider(attr: TokenStream, item: TokenStream) -> TokenStream {
     let type_name = &impl_item.self_ty;
 
     let commands = impl_item.items.iter().filter_map(|item| match item {
-        ImplItem::Method(impl_item_method) => Some(&impl_item_method.sig.ident),
+        ImplItem::Fn(impl_item_method) => Some(&impl_item_method.sig.ident),
         _ => None,
     });
 
@@ -792,7 +803,7 @@ pub fn derive_select_menu_options(item: TokenStream) -> TokenStream {
 
     let mut options_count_attr = None;
     for attr in &enum_item.attrs {
-        if attr.path.is_ident("options_count") {
+        if attr.meta.path().is_ident("options_count") {
             if options_count_attr.is_none() {
                 options_count_attr = Some(attr);
             } else {
@@ -812,12 +823,12 @@ pub fn derive_select_menu_options(item: TokenStream) -> TokenStream {
                     lit: Lit::Int(int), ..
                 }) => (Some(int.clone()), Some(int)),
                 Expr::Range(ExprRange {
-                    from,
+                    start,
                     limits: RangeLimits::Closed(_),
-                    to,
+                    end,
                     ..
                 }) => (
-                    match from {
+                    match start {
                         Some(value) => match *value {
                             Expr::Lit(ExprLit {
                                 lit: Lit::Int(int), ..
@@ -826,7 +837,7 @@ pub fn derive_select_menu_options(item: TokenStream) -> TokenStream {
                         },
                         None => None,
                     },
-                    match to {
+                    match end {
                         Some(value) => match *value {
                             Expr::Lit(ExprLit {
                                 lit: Lit::Int(int), ..
@@ -939,7 +950,7 @@ struct SelectMenu<'a> {
 
 struct SelectMenuOption<'a> {
     name: &'a Ident,
-    emoji: Option<syn::LitChar>,
+    emoji: Option<LitChar>,
     label: LitStr,
     description: Option<LitStr>,
     default: bool,
@@ -952,7 +963,7 @@ fn parse_select_menu_enum<'a>(
 ) -> Result<SelectMenu<'a>, TokenStream> {
     let mut uuid_attr = None;
     for attr in &enum_item.attrs {
-        if attr.path.is_ident(uuid_attr_name) {
+        if attr.meta.path().is_ident(uuid_attr_name) {
             if uuid_attr.is_none() {
                 uuid_attr = Some(attr);
             } else {
@@ -966,12 +977,12 @@ fn parse_select_menu_enum<'a>(
     };
 
     let Ok(uuid) = uuid_attr.parse_args::<LitStr>() else {
-        return Err(invalid_uuid(&uuid_attr.path, uuid_attr_name));
+        return Err(invalid_uuid(uuid_attr.meta.path(), uuid_attr_name));
     };
 
     let mut module_attr = None;
     for attr in &enum_item.attrs {
-        if attr.path.is_ident("module") {
+        if attr.meta.path().is_ident("module") {
             if module_attr.is_none() {
                 module_attr = Some(attr);
             } else {
@@ -985,7 +996,7 @@ fn parse_select_menu_enum<'a>(
     };
 
     let Ok(module) = module_attr.parse_args::<TypePath>() else {
-        return Err(invalid_module(&module_attr.path));
+        return Err(invalid_module(module_attr.meta.path()));
     };
 
     let mut default_option = None;
@@ -995,7 +1006,7 @@ fn parse_select_menu_enum<'a>(
         let mut option_attr = None;
 
         for attr in &variant.attrs {
-            if attr.path.is_ident("option") {
+            if attr.meta.path().is_ident("option") {
                 if option_attr.is_none() {
                     option_attr = Some(attr);
                 } else {
@@ -1008,58 +1019,84 @@ fn parse_select_menu_enum<'a>(
             return Err(missing_option(variant));
         };
 
-        let Ok(Meta::List(meta_list)) = option_attr.parse_meta() else {
+        let Ok(lit_list) = option_attr.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated) else {
             return Err(invalid_option(option_attr));
         };
 
-        let meta = meta_list.nested.iter().collect_vec();
-        let (emoji, label, description, default) = match &meta[..] {
-            [NestedMeta::Lit(Lit::Str(label))] => (None, label.clone(), None, false),
+        let lits = lit_list.iter().collect_vec();
+        let (emoji, label, description, default) = match &lits[..] {
+            [Expr::Lit(ExprLit {
+                lit: Lit::Str(label),
+                ..
+            })] => (None, label, None, false),
 
-            [NestedMeta::Lit(Lit::Str(label)), NestedMeta::Meta(Meta::Path(default_path))]
-                if default_path.is_ident("default") =>
-            {
-                (None, label.clone(), None, true)
-            }
+            [Expr::Lit(ExprLit {
+                lit: Lit::Str(label),
+                ..
+            }), Expr::Path(ExprPath {
+                path: default_path, ..
+            })] if default_path.is_ident("default") => (None, label, None, true),
 
-            [NestedMeta::Lit(Lit::Str(label)), NestedMeta::Lit(Lit::Str(description))] => {
-                (None, label.clone(), Some(description.clone()), false)
-            }
+            [Expr::Lit(ExprLit {
+                lit: Lit::Str(label),
+                ..
+            }), Expr::Lit(ExprLit {
+                lit: Lit::Str(description),
+                ..
+            })] => (None, label, Some(description), false),
 
-            [NestedMeta::Lit(Lit::Str(label)), NestedMeta::Lit(Lit::Str(description)), NestedMeta::Meta(Meta::Path(default_path))]
-                if default_path.is_ident("default") =>
-            {
-                (None, label.clone(), Some(description.clone()), true)
-            }
+            [Expr::Lit(ExprLit {
+                lit: Lit::Str(label),
+                ..
+            }), Expr::Lit(ExprLit {
+                lit: Lit::Str(description),
+                ..
+            }), Expr::Path(ExprPath {
+                path: default_path, ..
+            })] if default_path.is_ident("default") => (None, label, Some(description), true),
 
-            [NestedMeta::Lit(Lit::Char(emoji)), NestedMeta::Lit(Lit::Str(label))] => {
-                (Some(emoji.clone()), label.clone(), None, false)
-            }
+            [Expr::Lit(ExprLit {
+                lit: Lit::Char(emoji),
+                ..
+            }), Expr::Lit(ExprLit {
+                lit: Lit::Str(label),
+                ..
+            })] => (Some(emoji), label, None, false),
 
-            [NestedMeta::Lit(Lit::Char(emoji)), NestedMeta::Lit(Lit::Str(label)), NestedMeta::Meta(Meta::Path(default_path))]
-                if default_path.is_ident("default") =>
-            {
-                (Some(emoji.clone()), label.clone(), None, true)
-            }
+            [Expr::Lit(ExprLit {
+                lit: Lit::Char(emoji),
+                ..
+            }), Expr::Lit(ExprLit {
+                lit: Lit::Str(label),
+                ..
+            }), Expr::Path(ExprPath {
+                path: default_path, ..
+            })] if default_path.is_ident("default") => (Some(emoji), label, None, true),
 
-            [NestedMeta::Lit(Lit::Char(emoji)), NestedMeta::Lit(Lit::Str(label)), NestedMeta::Lit(Lit::Str(description))] => {
-                (
-                    Some(emoji.clone()),
-                    label.clone(),
-                    Some(description.clone()),
-                    false,
-                )
-            }
+            [Expr::Lit(ExprLit {
+                lit: Lit::Char(emoji),
+                ..
+            }), Expr::Lit(ExprLit {
+                lit: Lit::Str(label),
+                ..
+            }), Expr::Lit(ExprLit {
+                lit: Lit::Str(description),
+                ..
+            })] => (Some(emoji), label, Some(description), false),
 
-            [NestedMeta::Lit(Lit::Char(emoji)), NestedMeta::Lit(Lit::Str(label)), NestedMeta::Lit(Lit::Str(description)), NestedMeta::Meta(Meta::Path(default_path))]
-                if default_path.is_ident("default") =>
-            {
-                (
-                    Some(emoji.clone()),
-                    label.clone(),
-                    Some(description.clone()),
-                    true,
-                )
+            [Expr::Lit(ExprLit {
+                lit: Lit::Char(emoji),
+                ..
+            }), Expr::Lit(ExprLit {
+                lit: Lit::Str(label),
+                ..
+            }), Expr::Lit(ExprLit {
+                lit: Lit::Str(description),
+                ..
+            }), Expr::Path(ExprPath {
+                path: default_path, ..
+            })] if default_path.is_ident("default") => {
+                (Some(emoji), label, Some(description), true)
             }
 
             _ => return Err(invalid_option(option_attr)),
@@ -1069,15 +1106,15 @@ fn parse_select_menu_enum<'a>(
             if default_option.is_none() {
                 default_option = Some(&variant.ident);
             } else {
-                return Err(multiple_default_options(&meta_list));
+                return Err(multiple_default_options(&lit_list));
             }
         }
 
         options.push(SelectMenuOption {
             name: &variant.ident,
-            emoji,
-            label,
-            description,
+            emoji: emoji.cloned(),
+            label: label.clone(),
+            description: description.cloned(),
             default,
         });
     }
