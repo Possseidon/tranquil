@@ -7,7 +7,7 @@ use serenity::builder::{CreateActionRow, CreateButton};
 use tokio::time::sleep;
 use tranquil::{
     button::{Button, ButtonColor, LinkButton},
-    context::{CommandCtx, MessageComponentCtx},
+    context::{CommandCtx, ComponentCtx},
     handle_interactions,
     interaction::Interact,
     macros::{command_provider, slash},
@@ -34,7 +34,7 @@ impl Module for InteractionModule {
 impl InteractionModule {
     #[slash]
     async fn buttons_link(&self, ctx: CommandCtx) -> anyhow::Result<()> {
-        ctx.create_interaction_response(|response| {
+        ctx.create_response(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
                     components.create_action_row(|row| row.add_button(youtube_button().create()))
@@ -48,7 +48,7 @@ impl InteractionModule {
 
     #[slash]
     async fn buttons_ping(&self, ctx: CommandCtx) -> anyhow::Result<()> {
-        ctx.create_interaction_response(|response| {
+        ctx.create_response(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
                     components.create_action_row(|row| row.add_button(PingButton::create()))
@@ -62,7 +62,7 @@ impl InteractionModule {
 
     #[slash]
     async fn buttons_counter(&self, ctx: CommandCtx) -> anyhow::Result<()> {
-        ctx.create_interaction_response(|response| {
+        ctx.create_response(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
                     components.set_action_row(CounterButton::create_row(5, true))
@@ -76,7 +76,7 @@ impl InteractionModule {
 
     #[slash]
     async fn select_choice(&self, ctx: CommandCtx) -> anyhow::Result<()> {
-        ctx.create_interaction_response(|response| {
+        ctx.create_response(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
                     components.create_action_row(|row| row.add_select_menu(Color::create()))
@@ -90,7 +90,7 @@ impl InteractionModule {
 
     #[slash]
     async fn select_options(&self, ctx: CommandCtx) -> anyhow::Result<()> {
-        ctx.create_interaction_response(|response| {
+        ctx.create_response(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
                     components.create_action_row(|row| row.add_select_menu(Color::create_multi()))
@@ -128,12 +128,8 @@ impl Interact for PingButton {
 
     type Module = InteractionModule;
 
-    async fn interact(
-        self,
-        _module: &Self::Module,
-        ctx: MessageComponentCtx,
-    ) -> anyhow::Result<()> {
-        ctx.create_interaction_response(|response| {
+    async fn interact(self, _module: &Self::Module, ctx: ComponentCtx) -> anyhow::Result<()> {
+        ctx.create_response(|response| {
             response.interaction_response_data(|data| data.content("Pong!"))
         })
         .await?;
@@ -201,18 +197,14 @@ impl Interact for CounterButton {
 
     type Module = InteractionModule;
 
-    async fn interact(
-        self,
-        _module: &Self::Module,
-        ctx: MessageComponentCtx,
-    ) -> anyhow::Result<()> {
+    async fn interact(self, _module: &Self::Module, ctx: ComponentCtx) -> anyhow::Result<()> {
         match self.kind {
             ButtonAction::MinusTen
             | ButtonAction::Decrement
             | ButtonAction::Increment
             | ButtonAction::PlusTen => {
                 ctx.defer().await?;
-                ctx.edit_original_interaction_response(|response| {
+                ctx.edit_response(|response| {
                     response.components(|components| {
                         components.set_action_row(Self::create_row(self.value, self.enabled))
                     })
@@ -274,11 +266,7 @@ enum Color {
 
 #[async_trait]
 impl Select for Color {
-    async fn select(
-        self,
-        _module: &Self::Module,
-        mut ctx: MessageComponentCtx,
-    ) -> anyhow::Result<()> {
+    async fn select(self, _module: &Self::Module, mut ctx: ComponentCtx) -> anyhow::Result<()> {
         ctx.defer().await?;
         ctx.interaction
             .message
@@ -296,7 +284,7 @@ impl MultiSelect for Color {
     async fn multi_select(
         values: EnumSet<Self>,
         _module: &Self::Module,
-        mut ctx: MessageComponentCtx,
+        mut ctx: ComponentCtx,
     ) -> anyhow::Result<()> {
         ctx.defer().await?;
         ctx.interaction

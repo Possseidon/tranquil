@@ -36,18 +36,20 @@ impl<T: Send + Sync> CacheHttp for Ctx<T> {
 
 pub type CommandCtx = Ctx<ApplicationCommandInteraction>;
 pub type AutocompleteCtx = Ctx<AutocompleteInteraction>;
-pub type MessageComponentCtx = Ctx<MessageComponentInteraction>;
+pub type ComponentCtx = Ctx<MessageComponentInteraction>;
 pub type ModalCtx = Ctx<ModalSubmitInteraction>;
 
 impl CommandCtx {
     delegate! {
         to self.interaction {
-            pub async fn get_interaction_response(
+            #[call(get_interaction_response)]
+            pub async fn get_response(
                 &self,
                 [ &self.bot ],
             ) -> serenity::Result<Message>;
 
-            pub async fn create_interaction_response<'a, F>(
+            #[call(create_interaction_response)]
+            pub async fn create_response<'a, F>(
                 &self,
                 [ &self.bot ],
                 f: F,
@@ -57,7 +59,8 @@ impl CommandCtx {
                     &'b mut CreateInteractionResponse<'a>,
                 ) -> &'b mut CreateInteractionResponse<'a>;
 
-            pub async fn edit_original_interaction_response<F>(
+            #[call(edit_original_interaction_response)]
+            pub async fn edit_response<F>(
                 &self,
                 [ &self.bot ],
                 f: F
@@ -65,12 +68,14 @@ impl CommandCtx {
             where
                 F: FnOnce(&mut EditInteractionResponse) -> &mut EditInteractionResponse;
 
-            pub async fn delete_original_interaction_response(
+            #[call(delete_original_interaction_response)]
+            pub async fn delete_response(
                 &self,
                 [ &self.bot ],
             ) -> serenity::Result<()>;
 
-            pub async fn create_followup_message<'a, F>(
+            #[call(create_followup_message)]
+            pub async fn create_followup<'a, F>(
                 &self,
                 [ &self.bot ],
                 f: F
@@ -80,7 +85,8 @@ impl CommandCtx {
                     &'b mut CreateInteractionResponseFollowup<'a>,
                 ) -> &'b mut CreateInteractionResponseFollowup<'a>;
 
-            pub async fn edit_followup_message<'a, F>(
+            #[call(edit_followup_message)]
+            pub async fn edit_followup<'a, F>(
                 &self,
                 [ &self.bot ],
                 message_id: impl Into<MessageId>,
@@ -97,7 +103,8 @@ impl CommandCtx {
                 message_id: impl Into<MessageId>,
             ) -> serenity::Result<()>;
 
-            pub async fn get_followup_message(
+            #[call(get_followup_message)]
+            pub async fn get_followup(
                 &self,
                 [ &self.bot ],
                 message_id: impl Into<MessageId>,
@@ -111,7 +118,8 @@ impl CommandCtx {
 impl AutocompleteCtx {
     delegate! {
         to self.interaction {
-            pub async fn create_autocomplete_response<F>(
+            #[call(create_autocomplete_response)]
+            pub async fn create_response<F>(
                 &self,
                 [ &self.bot ],
                 f: F,
@@ -122,15 +130,17 @@ impl AutocompleteCtx {
     }
 }
 
-impl MessageComponentCtx {
+impl ComponentCtx {
     delegate! {
         to self.interaction {
-            pub async fn get_interaction_response(
+            #[call(get_interaction_response)]
+            pub async fn get_response(
                 &self,
                 [ &self.bot ],
             ) -> serenity::Result<Message>;
 
-            pub async fn create_interaction_response<'a, F>(
+            #[call(create_interaction_response)]
+            pub async fn create_response<'a, F>(
                 &self,
                 [ &self.bot ],
                 f: F,
@@ -140,7 +150,8 @@ impl MessageComponentCtx {
                     &'b mut CreateInteractionResponse<'a>,
                 ) -> &'b mut CreateInteractionResponse<'a>;
 
-            pub async fn edit_original_interaction_response<F>(
+            #[call(edit_original_interaction_response)]
+            pub async fn edit_response<F>(
                 &self,
                 [ &self.bot ],
                 f: F,
@@ -148,12 +159,14 @@ impl MessageComponentCtx {
             where
                 F: FnOnce(&mut EditInteractionResponse) -> &mut EditInteractionResponse;
 
-            pub async fn delete_original_interaction_response(
+            #[call(delete_original_interaction_response)]
+            pub async fn delete_response(
                 &self,
                 [ &self.bot ],
             ) -> serenity::Result<()>;
 
-            pub async fn create_followup_message<'a, F>(
+            #[call(create_followup_message)]
+            pub async fn create_followup<'a, F>(
                 &self,
                 [ &self.bot ],
                 f: F,
@@ -163,7 +176,8 @@ impl MessageComponentCtx {
                     &'b mut CreateInteractionResponseFollowup<'a>,
                 ) -> &'b mut CreateInteractionResponseFollowup<'a>;
 
-            pub async fn edit_followup_message<'a, F>(
+            #[call(edit_followup_message)]
+            pub async fn edit_followup<'a, F>(
                 &self,
                 [ &self.bot ],
                 message_id: impl Into<MessageId>,
@@ -174,13 +188,15 @@ impl MessageComponentCtx {
                     &'b mut CreateInteractionResponseFollowup<'a>,
                 ) -> &'b mut CreateInteractionResponseFollowup<'a>;
 
-            pub async fn get_followup_message(
+            #[call(get_followup_message)]
+            pub async fn get_followup(
                 &self,
                 [ &self.bot ],
                 message_id: impl Into<MessageId>,
             ) -> serenity::Result<Message>;
 
-            pub async fn delete_followup_message(
+            #[call(delete_followup_message)]
+            pub async fn delete_followup(
                 &self,
                 [ &self.bot ],
                 message_id: impl Into<MessageId>,
@@ -194,9 +210,11 @@ impl MessageComponentCtx {
 impl ModalCtx {
     delegate! {
         to self.interaction {
-            pub async fn get_interaction_response(&self, [ &self.bot ]) -> serenity::Result<Message>;
+            #[call(get_interaction_response)]
+            pub async fn get_response(&self, [ &self.bot ]) -> serenity::Result<Message>;
 
-            pub async fn create_interaction_response<'a, F>(
+            #[call(create_interaction_response)]
+            pub async fn create_response<'a, F>(
                 &self,
                 [ &self.bot ],
                 f: F,
@@ -206,22 +224,26 @@ impl ModalCtx {
                     &'b mut CreateInteractionResponse<'a>,
                 ) -> &'b mut CreateInteractionResponse<'a>;
 
-            pub async fn edit_original_interaction_response<F>(&self, [ &self.bot ], f: F) -> serenity::Result<Message>
+            #[call(edit_original_interaction_response)]
+            pub async fn edit_response<F>(&self, [ &self.bot ], f: F) -> serenity::Result<Message>
             where
                 F: FnOnce(&mut EditInteractionResponse) -> &mut EditInteractionResponse;
 
-            pub async fn delete_original_interaction_response(
+            #[call(delete_original_interaction_response)]
+            pub async fn delete_response(
                 &self,
                 [ &self.bot ],
             ) -> serenity::Result<()>;
 
-            pub async fn create_followup_message<'a, F>(&self, [ &self.bot ], f: F) -> serenity::Result<Message>
+            #[call(create_followup_message)]
+            pub async fn create_followup<'a, F>(&self, [ &self.bot ], f: F) -> serenity::Result<Message>
             where
                 for<'b> F: FnOnce(
                     &'b mut CreateInteractionResponseFollowup<'a>,
                 ) -> &'b mut CreateInteractionResponseFollowup<'a>;
 
-            pub async fn edit_followup_message<'a, F>(
+            #[call(edit_followup_message)]
+            pub async fn edit_followup<'a, F>(
                 &self,
                 [ &self.bot ],
                 message_id: impl Into<MessageId>,
@@ -232,7 +254,8 @@ impl ModalCtx {
                     &'b mut CreateInteractionResponseFollowup<'a>,
                 ) -> &'b mut CreateInteractionResponseFollowup<'a>;
 
-            pub async fn delete_followup_message(
+            #[call(delete_followup_message)]
+            pub async fn delete_followup(
                 &self,
                 [ &self.bot ],
                 message_id: impl Into<MessageId>,

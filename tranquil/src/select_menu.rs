@@ -8,8 +8,7 @@ use serenity::{builder::CreateSelectMenu, model::channel::ReactionType};
 use uuid::Uuid;
 
 use crate::{
-    context::MessageComponentCtx, custom_id::custom_id_encode, interaction::Interact,
-    module::Module,
+    context::ComponentCtx, custom_id::custom_id_encode, interaction::Interact, module::Module,
 };
 
 pub struct SelectMenu {
@@ -173,7 +172,7 @@ impl<T: Select + Sync> Interact for SelectHandler<T> {
 
     type Module = T::Module;
 
-    async fn interact(self, module: &Self::Module, ctx: MessageComponentCtx) -> anyhow::Result<()> {
+    async fn interact(self, module: &Self::Module, ctx: ComponentCtx) -> anyhow::Result<()> {
         let values = &ctx.interaction.data.values;
 
         if values.len() != 1 {
@@ -186,7 +185,7 @@ impl<T: Select + Sync> Interact for SelectHandler<T> {
 
 #[async_trait]
 pub trait Select: SelectMenuChoice {
-    async fn select(self, module: &Self::Module, ctx: MessageComponentCtx) -> anyhow::Result<()>;
+    async fn select(self, module: &Self::Module, ctx: ComponentCtx) -> anyhow::Result<()>;
 }
 
 pub use tranquil_macros::SelectMenuOptions;
@@ -220,7 +219,7 @@ where
 
     type Module = T::Module;
 
-    async fn interact(self, module: &Self::Module, ctx: MessageComponentCtx) -> anyhow::Result<()> {
+    async fn interact(self, module: &Self::Module, ctx: ComponentCtx) -> anyhow::Result<()> {
         T::multi_select(T::from_values(&ctx.interaction.data.values)?, module, ctx).await
     }
 }
@@ -230,6 +229,6 @@ pub trait MultiSelect: SelectMenuOptions {
     async fn multi_select(
         values: EnumSet<Self>,
         module: &Self::Module,
-        ctx: MessageComponentCtx,
+        ctx: ComponentCtx,
     ) -> anyhow::Result<()>;
 }

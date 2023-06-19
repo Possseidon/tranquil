@@ -17,7 +17,7 @@ impl Module for ExampleModule {
 }
 
 async fn pong(ctx: CommandCtx) -> anyhow::Result<()> {
-    ctx.create_interaction_response(|response| {
+    ctx.create_response(|response| {
         response.interaction_response_data(|data| data.content("Pong!"))
     })
     .await?;

@@ -18,7 +18,7 @@ impl AutocompleteModule {
     ) -> anyhow::Result<()> {
         let you_typed = format!("You typed: {value}");
 
-        ctx.create_autocomplete_response(|response| response.add_string_choice(you_typed, value))
+        ctx.create_response(|response| response.add_string_choice(you_typed, value))
             .await?;
 
         Ok(())
@@ -39,7 +39,7 @@ impl AutocompleteModule {
         let optional_autocompleted_completion =
             format!("optional_autocompleted: {optional_autocompleted:?}");
 
-        ctx.create_autocomplete_response(|response| {
+        ctx.create_response(|response| {
             response
                 .add_string_choice(
                     not_autocompleted_completion,
@@ -71,7 +71,7 @@ impl AutocompleteModule {
         ctx: CommandCtx,
         value: Autocomplete<String>,
     ) -> anyhow::Result<()> {
-        ctx.create_interaction_response(|response| {
+        ctx.create_response(|response| {
             response
                 .interaction_response_data(|data| data.content(format!("```rust\n{value:?}\n```")))
         })
@@ -88,7 +88,7 @@ impl AutocompleteModule {
         optional: Option<String>,
         optional_autocompleted: Autocomplete<Option<String>>,
     ) -> anyhow::Result<()> {
-        ctx.create_interaction_response(|response| {
+        ctx.create_response(|response| {
             response.interaction_response_data(|data| {
                 data.content(format!(
                     indoc! {r#"

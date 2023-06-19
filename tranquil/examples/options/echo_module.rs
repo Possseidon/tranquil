@@ -492,7 +492,7 @@ impl EchoModule {
 }
 
 async fn echo(ctx: CommandCtx, value: impl std::fmt::Debug) -> anyhow::Result<()> {
-    ctx.create_interaction_response(|response| {
+    ctx.create_response(|response| {
         response.interaction_response_data(|data| data.content(format!("```rust\n{value:#?}\n```")))
     })
     .await?;

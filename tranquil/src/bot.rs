@@ -34,7 +34,7 @@ use uuid::Uuid;
 
 use crate::{
     command::{CommandMap, CommandMapEntry, CommandPath, SubcommandMapEntry},
-    context::{AutocompleteCtx, CommandCtx, Ctx, MessageComponentCtx, ModalCtx},
+    context::{AutocompleteCtx, CommandCtx, ComponentCtx, Ctx, ModalCtx},
     l10n::{CommandPathRef, L10n},
     module::Module,
 };
@@ -247,7 +247,7 @@ impl Bot {
         match self.command_map.find_command(&command_path) {
             Some(command) => command.run(ctx).await?,
             None => {
-                ctx.create_interaction_response(|response| {
+                ctx.create_response(|response| {
                     response.interaction_response_data(|data| {
                         data.embed(|embed| {
                             embed.color(colors::css::DANGER).field(
@@ -282,7 +282,7 @@ impl Bot {
             })
     }
 
-    async fn handle_message_component(&self, mut ctx: MessageComponentCtx) -> anyhow::Result<()> {
+    async fn handle_message_component(&self, mut ctx: ComponentCtx) -> anyhow::Result<()> {
         match ctx.interaction.data.component_type {
             ComponentType::Button | ComponentType::SelectMenu => {
                 let custom_id = take(&mut ctx.interaction.data.custom_id);
@@ -304,8 +304,7 @@ impl Bot {
             Some(command) => command.autocomplete(ctx).await?,
             None => {
                 // Commands are probably outdated... Send an empty autocomplete response.
-                ctx.create_autocomplete_response(|response| response)
-                    .await?
+                ctx.create_response(|response| response).await?
             }
         }
 
