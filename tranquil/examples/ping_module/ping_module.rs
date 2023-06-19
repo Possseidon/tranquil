@@ -11,7 +11,7 @@ pub(crate) struct PingModule;
 impl PingModule {
     #[slash]
     async fn ping(&self, ctx: CommandCtx) -> anyhow::Result<()> {
-        ctx.create_interaction_response(|response| {
+        ctx.create_response(|response| {
             response.interaction_response_data(|data| data.content("Pong!"))
         })
         .await?;

@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     command::CommandProvider,
-    context::{MessageComponentCtx, ModalCtx},
+    context::{ComponentCtx, ModalCtx},
     l10n::{L10n, L10nLoadError},
 };
 
@@ -24,12 +24,7 @@ pub trait Module: CommandProvider + Send + Sync {
         &[]
     }
 
-    async fn interact(
-        &self,
-        _uuid: Uuid,
-        _state: &str,
-        _ctx: MessageComponentCtx,
-    ) -> anyhow::Result<()> {
+    async fn interact(&self, _uuid: Uuid, _state: &str, _ctx: ComponentCtx) -> anyhow::Result<()> {
         panic!("module does not handle any interactions")
     }
 

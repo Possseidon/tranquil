@@ -7,7 +7,7 @@ use serenity::{
 use uuid::Uuid;
 
 use crate::{
-    context::{CommandCtx, MessageComponentCtx},
+    context::{CommandCtx, ComponentCtx},
     custom_id::custom_id_encode,
 };
 
@@ -86,7 +86,7 @@ impl Modal {
                 .collect(),
         );
 
-        ctx.create_interaction_response(move |response| {
+        ctx.create_response(move |response| {
             response
                 .kind(InteractionResponseType::Modal)
                 .interaction_response_data(move |data| {
@@ -162,7 +162,7 @@ impl TextInput {
 
 #[async_trait]
 pub trait RespondCtx {
-    async fn create_interaction_response<'a, F>(&self, f: F) -> serenity::Result<()>
+    async fn create_response<'a, F>(&self, f: F) -> serenity::Result<()>
     where
         for<'b> F: FnOnce(&'b mut CreateInteractionResponse<'a>) -> &'b mut CreateInteractionResponse<'a>
             + Send;
@@ -170,22 +170,22 @@ pub trait RespondCtx {
 
 #[async_trait]
 impl RespondCtx for CommandCtx {
-    async fn create_interaction_response<'a, F>(&self, f: F) -> serenity::Result<()>
+    async fn create_response<'a, F>(&self, f: F) -> serenity::Result<()>
     where
         for<'b> F: FnOnce(&'b mut CreateInteractionResponse<'a>) -> &'b mut CreateInteractionResponse<'a>
             + Send,
     {
-        self.create_interaction_response(f).await
+        self.create_response(f).await
     }
 }
 
 #[async_trait]
-impl RespondCtx for MessageComponentCtx {
-    async fn create_interaction_response<'a, F>(&self, f: F) -> serenity::Result<()>
+impl RespondCtx for ComponentCtx {
+    async fn create_response<'a, F>(&self, f: F) -> serenity::Result<()>
     where
         for<'b> F: FnOnce(&'b mut CreateInteractionResponse<'a>) -> &'b mut CreateInteractionResponse<'a>
             + Send,
     {
-        self.create_interaction_response(f).await
+        self.create_response(f).await
     }
 }

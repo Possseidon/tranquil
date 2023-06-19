@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use uuid::Uuid;
 
-use crate::{context::MessageComponentCtx, module::Module};
+use crate::{context::ComponentCtx, module::Module};
 
 #[async_trait]
 pub trait Interact: Serialize + DeserializeOwned {
@@ -10,7 +10,7 @@ pub trait Interact: Serialize + DeserializeOwned {
 
     type Module: Module;
 
-    async fn interact(self, module: &Self::Module, ctx: MessageComponentCtx) -> anyhow::Result<()>;
+    async fn interact(self, module: &Self::Module, ctx: ComponentCtx) -> anyhow::Result<()>;
 }
 
 #[macro_export]
@@ -25,7 +25,7 @@ macro_rules! handle_interactions {
             &'life0 self,
             uuid: $crate::uuid::Uuid,
             state: &'life1 str,
-            ctx: $crate::context::MessageComponentCtx,
+            ctx: $crate::context::ComponentCtx,
         ) -> ::std::pin::Pin<
             ::std::boxed::Box<
                 dyn ::std::future::Future<Output = $crate::anyhow::Result<()>>
