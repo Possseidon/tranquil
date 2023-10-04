@@ -8,7 +8,7 @@ use std::{
     },
 };
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use futures::{future::join_all, join};
 use itertools::chain;
@@ -89,7 +89,7 @@ impl Bot {
         self
     }
 
-    pub async fn run(mut self, discord_token: impl AsRef<str>) -> anyhow::Result<()> {
+    pub async fn run(mut self, discord_token: impl AsRef<str>) -> Result<()> {
         // TODO: Token validation doesn't work, because of the middle "timestamp" part not always being valid base64.
         // validate_token(&token).map_err(|err| {
         //     eprintln!("{err}");
@@ -111,16 +111,16 @@ impl Bot {
         Ok(())
     }
 
-    fn load_command_map(&self) -> anyhow::Result<CommandMap> {
+    fn load_command_map(&self) -> Result<CommandMap> {
         self.modules.iter().try_fold(
             Default::default(),
-            |command_map, module| -> anyhow::Result<CommandMap> {
+            |command_map, module| -> Result<CommandMap> {
                 Ok(command_map.merge(module.clone().command_map()?)?)
             },
         )
     }
 
-    fn load_custom_id_map(&self) -> anyhow::Result<CustomIdMap> {
+    fn load_custom_id_map(&self) -> Result<CustomIdMap> {
         let mut custom_id_map = CustomIdMap::new();
         for module in &self.modules {
             for &uuid in chain(module.interaction_uuids(), module.modal_uuids()) {
@@ -133,7 +133,7 @@ impl Bot {
         Ok(custom_id_map)
     }
 
-    async fn load_l10n(&self) -> anyhow::Result<L10n> {
+    async fn load_l10n(&self) -> Result<L10n> {
         L10n::merge_results(join_all(self.modules.iter().map(|module| module.l10n())).await)
             .map_err(|error| {
                 eprintln!("{error}");
@@ -141,7 +141,7 @@ impl Bot {
             })
     }
 
-    pub async fn run_until_ctrl_c(self, discord_token: impl AsRef<str>) -> anyhow::Result<()> {
+    pub async fn run_until_ctrl_c(self, discord_token: impl AsRef<str>) -> Result<()> {
         tokio::select! {
             result = self.run(discord_token) => result?,
             result = tokio::signal::ctrl_c() => result?,
@@ -241,7 +241,7 @@ impl Bot {
         }
     }
 
-    async fn handle_command(&self, ctx: CommandCtx) -> anyhow::Result<()> {
+    async fn handle_command(&self, ctx: CommandCtx) -> Result<()> {
         let command_path = CommandPath::resolve(&ctx.interaction.data);
 
         match self.command_map.find_command(&command_path) {
@@ -269,7 +269,7 @@ impl Bot {
     fn parse_custom_id<'custom_id>(
         &self,
         custom_id: &'custom_id str,
-    ) -> anyhow::Result<(Uuid, &'custom_id str)> {
+    ) -> Result<(Uuid, &'custom_id str)> {
         custom_id
             .split_once(' ')
             .ok_or_else(|| anyhow!("invalid custom_id: {custom_id}"))
@@ -282,7 +282,7 @@ impl Bot {
             })
     }
 
-    async fn handle_message_component(&self, mut ctx: ComponentCtx) -> anyhow::Result<()> {
+    async fn handle_message_component(&self, mut ctx: ComponentCtx) -> Result<()> {
         match ctx.interaction.data.component_type {
             ComponentType::Button | ComponentType::SelectMenu => {
                 let custom_id = take(&mut ctx.interaction.data.custom_id);
@@ -297,7 +297,7 @@ impl Bot {
         Ok(())
     }
 
-    async fn handle_autocomplete(&self, ctx: AutocompleteCtx) -> anyhow::Result<()> {
+    async fn handle_autocomplete(&self, ctx: AutocompleteCtx) -> Result<()> {
         let command_path = CommandPath::resolve(&ctx.interaction.data);
 
         match self.command_map.find_command(&command_path) {
@@ -311,7 +311,7 @@ impl Bot {
         Ok(())
     }
 
-    async fn handle_modal(&self, mut ctx: ModalCtx) -> anyhow::Result<()> {
+    async fn handle_modal(&self, mut ctx: ModalCtx) -> Result<()> {
         let custom_id = take(&mut ctx.interaction.data.custom_id);
         let (uuid, state) = self.parse_custom_id(&custom_id)?;
         self.resolve_custom_id_module(uuid)?
@@ -319,7 +319,7 @@ impl Bot {
             .await
     }
 
-    fn resolve_custom_id_module(&self, uuid: Uuid) -> anyhow::Result<&Arc<dyn Module>> {
+    fn resolve_custom_id_module(&self, uuid: Uuid) -> Result<&Arc<dyn Module>> {
         self.custom_id_map
             .get(&uuid)
             .ok_or_else(|| anyhow!("no module that handles the custom_id uuid {uuid}"))

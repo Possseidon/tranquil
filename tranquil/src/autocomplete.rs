@@ -1,5 +1,6 @@
 use std::{pin::Pin, sync::Arc};
 
+use anyhow::Result;
 use async_trait::async_trait;
 use futures::Future;
 use serenity::{
@@ -13,7 +14,7 @@ use crate::{
 };
 
 pub(crate) type AutocompleteFunction<M> = Box<
-    dyn Fn(Arc<M>, AutocompleteCtx) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
+    dyn Fn(Arc<M>, AutocompleteCtx) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>
         + Send
         + Sync,
 >;

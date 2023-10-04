@@ -1,3 +1,4 @@
+use anyhow::Result;
 use async_trait::async_trait;
 use serenity::model::gateway::GatewayIntents;
 use uuid::Uuid;
@@ -24,7 +25,7 @@ pub trait Module: CommandProvider + Send + Sync {
         &[]
     }
 
-    async fn interact(&self, _uuid: Uuid, _state: &str, _ctx: ComponentCtx) -> anyhow::Result<()> {
+    async fn interact(&self, _uuid: Uuid, _state: &str, _ctx: ComponentCtx) -> Result<()> {
         panic!("module does not handle any interactions")
     }
 
@@ -32,7 +33,7 @@ pub trait Module: CommandProvider + Send + Sync {
         &[]
     }
 
-    async fn submit(&self, _uuid: Uuid, _state: &str, _ctx: ModalCtx) -> anyhow::Result<()> {
+    async fn submit(&self, _uuid: Uuid, _state: &str, _ctx: ModalCtx) -> Result<()> {
         panic!("module does not handle any modals")
     }
 }

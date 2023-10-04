@@ -1,3 +1,4 @@
+use anyhow::Result;
 use tranquil::{
     bot::Bot,
     utils::{debug_guilds_from_env, discord_token_from_env, dotenv_if_exists},
@@ -6,7 +7,7 @@ use tranquil::{
 mod subcommand_module;
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<()> {
     dotenv_if_exists()?;
 
     Bot::new()

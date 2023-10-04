@@ -1,3 +1,4 @@
+use anyhow::Result;
 use async_trait::async_trait;
 use tranquil::{
     context::CommandCtx,
@@ -16,7 +17,7 @@ impl Module for ExampleModule {
     }
 }
 
-async fn pong(ctx: CommandCtx) -> anyhow::Result<()> {
+async fn pong(ctx: CommandCtx) -> Result<()> {
     ctx.create_response(|response| {
         response.interaction_response_data(|data| data.content("Pong!"))
     })
@@ -28,17 +29,12 @@ async fn pong(ctx: CommandCtx) -> anyhow::Result<()> {
 #[allow(unused_variables)]
 impl ExampleModule {
     #[slash]
-    async fn members_add(&self, ctx: CommandCtx, member: String) -> anyhow::Result<()> {
+    async fn members_add(&self, ctx: CommandCtx, member: String) -> Result<()> {
         pong(ctx).await
     }
 
     #[slash]
-    async fn members_color(
-        &self,
-        ctx: CommandCtx,
-        member: String,
-        color: Color,
-    ) -> anyhow::Result<()> {
+    async fn members_color(&self, ctx: CommandCtx, member: String, color: Color) -> Result<()> {
         pong(ctx).await
     }
 }

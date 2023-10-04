@@ -1,3 +1,4 @@
+use anyhow::Result;
 use bounded_integer::{
     BoundedI128, BoundedI16, BoundedI32, BoundedI64, BoundedI8, BoundedIsize, BoundedU128,
     BoundedU16, BoundedU32, BoundedU64, BoundedU8, BoundedUsize,
@@ -29,41 +30,37 @@ pub(crate) struct EchoModule;
 #[command_provider]
 impl EchoModule {
     #[slash]
-    async fn echo_string(&self, ctx: CommandCtx, value: String) -> anyhow::Result<()> {
+    async fn echo_string(&self, ctx: CommandCtx, value: String) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_i64(&self, ctx: CommandCtx, value: i64) -> anyhow::Result<()> {
+    async fn echo_i64(&self, ctx: CommandCtx, value: i64) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_bool(&self, ctx: CommandCtx, value: bool) -> anyhow::Result<()> {
+    async fn echo_bool(&self, ctx: CommandCtx, value: bool) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash(rename = "echo partial-channel any")]
-    async fn echo_partial_channel_any(
-        &self,
-        ctx: CommandCtx,
-        value: PartialChannel,
-    ) -> anyhow::Result<()> {
+    async fn echo_partial_channel_any(&self, ctx: CommandCtx, value: PartialChannel) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_role(&self, ctx: CommandCtx, value: Role) -> anyhow::Result<()> {
+    async fn echo_role(&self, ctx: CommandCtx, value: Role) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_f64(&self, ctx: CommandCtx, value: f64) -> anyhow::Result<()> {
+    async fn echo_f64(&self, ctx: CommandCtx, value: f64) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_attachment(&self, ctx: CommandCtx, value: Attachment) -> anyhow::Result<()> {
+    async fn echo_attachment(&self, ctx: CommandCtx, value: Attachment) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -74,7 +71,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: PartialTextChannel,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -83,7 +80,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: PartialPrivateChannel,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -92,7 +89,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: PartialVoiceChannel,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -101,7 +98,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: PartialChannelCategory,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -110,7 +107,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: PartialNewsChannel,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -119,7 +116,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: PartialNewsThreadChannel,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -128,7 +125,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: PartialPublicThreadChannel,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -137,7 +134,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: PartialPrivateThreadChannel,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -146,7 +143,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: PartialStageChannel,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -155,7 +152,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: PartialDirectoryChannel,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -164,55 +161,47 @@ impl EchoModule {
     //     &self,
     //     ctx: CommandCtx,
     //     value: PartialForumChannel,
-    // ) -> anyhow::Result<()> {
+    // ) -> Result<()> {
     //     echo(ctx, value).await
     // }
 
     #[slash(rename = "echo channel-id")]
-    async fn echo_channel_id(&self, ctx: CommandCtx, value: ChannelId) -> anyhow::Result<()> {
+    async fn echo_channel_id(&self, ctx: CommandCtx, value: ChannelId) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_channel_any(&self, ctx: CommandCtx, value: Channel) -> anyhow::Result<()> {
+    async fn echo_channel_any(&self, ctx: CommandCtx, value: Channel) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_channel_guild(&self, ctx: CommandCtx, value: GuildChannel) -> anyhow::Result<()> {
+    async fn echo_channel_guild(&self, ctx: CommandCtx, value: GuildChannel) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_channel_private(
-        &self,
-        ctx: CommandCtx,
-        value: PrivateChannel,
-    ) -> anyhow::Result<()> {
+    async fn echo_channel_private(&self, ctx: CommandCtx, value: PrivateChannel) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_channel_category(
-        &self,
-        ctx: CommandCtx,
-        value: ChannelCategory,
-    ) -> anyhow::Result<()> {
+    async fn echo_channel_category(&self, ctx: CommandCtx, value: ChannelCategory) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_channel_text(&self, ctx: CommandCtx, value: TextChannel) -> anyhow::Result<()> {
+    async fn echo_channel_text(&self, ctx: CommandCtx, value: TextChannel) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_channel_voice(&self, ctx: CommandCtx, value: VoiceChannel) -> anyhow::Result<()> {
+    async fn echo_channel_voice(&self, ctx: CommandCtx, value: VoiceChannel) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_channel_news(&self, ctx: CommandCtx, value: NewsChannel) -> anyhow::Result<()> {
+    async fn echo_channel_news(&self, ctx: CommandCtx, value: NewsChannel) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -221,7 +210,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: NewsThreadChannel,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -230,7 +219,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: PublicThreadChannel,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -239,21 +228,17 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: PrivateThreadChannel,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_channel_stage(&self, ctx: CommandCtx, value: StageChannel) -> anyhow::Result<()> {
+    async fn echo_channel_stage(&self, ctx: CommandCtx, value: StageChannel) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_channel_directory(
-        &self,
-        ctx: CommandCtx,
-        value: DirectoryChannel,
-    ) -> anyhow::Result<()> {
+    async fn echo_channel_directory(&self, ctx: CommandCtx, value: DirectoryChannel) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -262,64 +247,64 @@ impl EchoModule {
     //     &self,
     //     ctx: CommandCtx,
     //     value: ForumChannel,
-    // ) -> anyhow::Result<()> {
+    // ) -> Result<()> {
     //     echo(ctx, value).await
     // }
 
     // --- integer
 
     #[slash]
-    async fn echo_integer_i8(&self, ctx: CommandCtx, value: i8) -> anyhow::Result<()> {
+    async fn echo_integer_i8(&self, ctx: CommandCtx, value: i8) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_integer_i16(&self, ctx: CommandCtx, value: i16) -> anyhow::Result<()> {
+    async fn echo_integer_i16(&self, ctx: CommandCtx, value: i16) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_integer_i32(&self, ctx: CommandCtx, value: i32) -> anyhow::Result<()> {
+    async fn echo_integer_i32(&self, ctx: CommandCtx, value: i32) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_integer_i128(&self, ctx: CommandCtx, value: i128) -> anyhow::Result<()> {
+    async fn echo_integer_i128(&self, ctx: CommandCtx, value: i128) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_integer_isize(&self, ctx: CommandCtx, value: isize) -> anyhow::Result<()> {
+    async fn echo_integer_isize(&self, ctx: CommandCtx, value: isize) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_integer_u8(&self, ctx: CommandCtx, value: u8) -> anyhow::Result<()> {
+    async fn echo_integer_u8(&self, ctx: CommandCtx, value: u8) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_integer_u16(&self, ctx: CommandCtx, value: u16) -> anyhow::Result<()> {
+    async fn echo_integer_u16(&self, ctx: CommandCtx, value: u16) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_integer_u32(&self, ctx: CommandCtx, value: u32) -> anyhow::Result<()> {
+    async fn echo_integer_u32(&self, ctx: CommandCtx, value: u32) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_integer_u64(&self, ctx: CommandCtx, value: u64) -> anyhow::Result<()> {
+    async fn echo_integer_u64(&self, ctx: CommandCtx, value: u64) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_integer_u128(&self, ctx: CommandCtx, value: u128) -> anyhow::Result<()> {
+    async fn echo_integer_u128(&self, ctx: CommandCtx, value: u128) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_integer_usize(&self, ctx: CommandCtx, value: usize) -> anyhow::Result<()> {
+    async fn echo_integer_usize(&self, ctx: CommandCtx, value: usize) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -328,7 +313,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: BoundedI8<42, 69>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -337,7 +322,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: BoundedI16<42, 69>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -346,7 +331,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: BoundedI32<42, 69>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -355,7 +340,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: BoundedI64<42, 69>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -364,7 +349,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: BoundedI128<42, 69>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -373,7 +358,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: BoundedIsize<42, 69>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -382,7 +367,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: BoundedU8<42, 69>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -391,7 +376,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: BoundedU16<42, 69>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -400,7 +385,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: BoundedU32<42, 69>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -409,7 +394,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: BoundedU64<42, 69>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -418,7 +403,7 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: BoundedU128<42, 69>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
@@ -427,71 +412,67 @@ impl EchoModule {
         &self,
         ctx: CommandCtx,
         value: BoundedUsize<42, 69>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         echo(ctx, value).await
     }
 
     // --- mentionable
 
     #[slash]
-    async fn echo_mentionable(&self, ctx: CommandCtx, value: Mentionable) -> anyhow::Result<()> {
+    async fn echo_mentionable(&self, ctx: CommandCtx, value: Mentionable) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash]
-    async fn echo_mention(&self, ctx: CommandCtx, value: Mention) -> anyhow::Result<()> {
+    async fn echo_mention(&self, ctx: CommandCtx, value: Mention) -> Result<()> {
         echo(ctx, value).await
     }
 
     // --- number
 
     #[slash]
-    async fn echo_f32(&self, ctx: CommandCtx, value: f32) -> anyhow::Result<()> {
+    async fn echo_f32(&self, ctx: CommandCtx, value: f32) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash(rename = "echo bounded-number")]
-    async fn echo_bounded_number(&self, ctx: CommandCtx, value: NiceNumber) -> anyhow::Result<()> {
+    async fn echo_bounded_number(&self, ctx: CommandCtx, value: NiceNumber) -> Result<()> {
         echo(ctx, value).await
     }
 
     // --- option
 
     #[slash]
-    async fn echo_option(&self, ctx: CommandCtx, value: Option<String>) -> anyhow::Result<()> {
+    async fn echo_option(&self, ctx: CommandCtx, value: Option<String>) -> Result<()> {
         echo(ctx, value).await
     }
 
     // --- string
 
     #[slash]
-    async fn echo_choice(&self, ctx: CommandCtx, value: Color) -> anyhow::Result<()> {
+    async fn echo_choice(&self, ctx: CommandCtx, value: Color) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash(rename = "echo bounded-string")]
-    async fn echo_bounded_string(&self, ctx: CommandCtx, value: NiceString) -> anyhow::Result<()> {
+    async fn echo_bounded_string(&self, ctx: CommandCtx, value: NiceString) -> Result<()> {
         echo(ctx, value).await
     }
 
     // --- user
 
     #[slash]
-    async fn echo_user(&self, ctx: CommandCtx, value: User) -> anyhow::Result<()> {
+    async fn echo_user(&self, ctx: CommandCtx, value: User) -> Result<()> {
         echo(ctx, value).await
     }
 
     #[slash(rename = "echo partial-member")]
-    async fn echo_partial_member(
-        &self,
-        ctx: CommandCtx,
-        value: PartialMember,
-    ) -> anyhow::Result<()> {
+    async fn echo_partial_member(&self, ctx: CommandCtx, value: PartialMember) -> Result<()> {
         echo(ctx, value).await
     }
 }
 
-async fn echo(ctx: CommandCtx, value: impl std::fmt::Debug) -> anyhow::Result<()> {
+async fn echo(ctx: CommandCtx, value: impl std::fmt::Debug) -> Result<()> {
     ctx.create_response(|response| {
         response.interaction_response_data(|data| data.content(format!("```rust\n{value:#?}\n```")))
     })

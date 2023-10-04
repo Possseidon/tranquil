@@ -1,3 +1,4 @@
+use anyhow::Result;
 use async_trait::async_trait;
 use serde::Serialize;
 use serenity::{
@@ -18,7 +19,7 @@ pub trait OpenModal: Serialize {
     type Module;
     type Response: ModalResponse;
 
-    async fn submit(&self, module: &Self::Module, response: Self::Response) -> anyhow::Result<()>;
+    async fn submit(&self, module: &Self::Module, response: Self::Response) -> Result<()>;
 }
 
 pub trait ModalResponse {}

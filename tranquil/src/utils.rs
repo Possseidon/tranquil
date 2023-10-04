@@ -1,5 +1,6 @@
 use std::{env, ffi::OsStr};
 
+use anyhow::Result;
 use serenity::model::id::GuildId;
 
 use crate::bot::ApplicationCommandUpdate;
@@ -16,7 +17,7 @@ pub fn discord_token_from_env() -> Result<String, env::VarError> {
     discord_token_from_env_var("DISCORD_TOKEN")
 }
 
-pub fn debug_guilds_from_env() -> Result<Option<ApplicationCommandUpdate>, anyhow::Error> {
+pub fn debug_guilds_from_env() -> Result<Option<ApplicationCommandUpdate>> {
     debug_guilds_from_env_var("DEBUG_GUILDS")
 }
 
@@ -34,7 +35,7 @@ pub fn discord_token_from_env_var(key: impl AsRef<OsStr>) -> Result<String, env:
 
 pub fn debug_guilds_from_env_var(
     key: impl AsRef<OsStr>,
-) -> Result<Option<ApplicationCommandUpdate>, anyhow::Error> {
+) -> Result<Option<ApplicationCommandUpdate>> {
     debug_guilds_from_env_var_silent(&key).map_err(|error| {
         eprintln!("{} invalid", key.as_ref().to_string_lossy());
         error
@@ -43,7 +44,7 @@ pub fn debug_guilds_from_env_var(
 
 fn debug_guilds_from_env_var_silent(
     key: impl AsRef<OsStr>,
-) -> Result<Option<ApplicationCommandUpdate>, anyhow::Error> {
+) -> Result<Option<ApplicationCommandUpdate>> {
     match env::var(key) {
         Ok(debug_guilds) => Ok(Some(ApplicationCommandUpdate::Only({
             let parsed_guild_ids = debug_guilds

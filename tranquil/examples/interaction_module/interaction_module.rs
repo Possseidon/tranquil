@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use anyhow::Result;
 use async_trait::async_trait;
 use enumset::{EnumSet, EnumSetType};
 use serde::{Deserialize, Serialize};
@@ -33,7 +34,7 @@ impl Module for InteractionModule {
 #[command_provider]
 impl InteractionModule {
     #[slash]
-    async fn buttons_link(&self, ctx: CommandCtx) -> anyhow::Result<()> {
+    async fn buttons_link(&self, ctx: CommandCtx) -> Result<()> {
         ctx.create_response(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
@@ -47,7 +48,7 @@ impl InteractionModule {
     }
 
     #[slash]
-    async fn buttons_ping(&self, ctx: CommandCtx) -> anyhow::Result<()> {
+    async fn buttons_ping(&self, ctx: CommandCtx) -> Result<()> {
         ctx.create_response(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
@@ -61,7 +62,7 @@ impl InteractionModule {
     }
 
     #[slash]
-    async fn buttons_counter(&self, ctx: CommandCtx) -> anyhow::Result<()> {
+    async fn buttons_counter(&self, ctx: CommandCtx) -> Result<()> {
         ctx.create_response(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
@@ -75,7 +76,7 @@ impl InteractionModule {
     }
 
     #[slash]
-    async fn select_choice(&self, ctx: CommandCtx) -> anyhow::Result<()> {
+    async fn select_choice(&self, ctx: CommandCtx) -> Result<()> {
         ctx.create_response(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
@@ -89,7 +90,7 @@ impl InteractionModule {
     }
 
     #[slash]
-    async fn select_options(&self, ctx: CommandCtx) -> anyhow::Result<()> {
+    async fn select_options(&self, ctx: CommandCtx) -> Result<()> {
         ctx.create_response(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
@@ -128,7 +129,7 @@ impl Interact for PingButton {
 
     type Module = InteractionModule;
 
-    async fn interact(self, _module: &Self::Module, ctx: ComponentCtx) -> anyhow::Result<()> {
+    async fn interact(self, _module: &Self::Module, ctx: ComponentCtx) -> Result<()> {
         ctx.create_response(|response| {
             response.interaction_response_data(|data| data.content("Pong!"))
         })
@@ -197,7 +198,7 @@ impl Interact for CounterButton {
 
     type Module = InteractionModule;
 
-    async fn interact(self, _module: &Self::Module, ctx: ComponentCtx) -> anyhow::Result<()> {
+    async fn interact(self, _module: &Self::Module, ctx: ComponentCtx) -> Result<()> {
         match self.kind {
             ButtonAction::MinusTen
             | ButtonAction::Decrement
@@ -266,7 +267,7 @@ enum Color {
 
 #[async_trait]
 impl Select for Color {
-    async fn select(self, _module: &Self::Module, mut ctx: ComponentCtx) -> anyhow::Result<()> {
+    async fn select(self, _module: &Self::Module, mut ctx: ComponentCtx) -> Result<()> {
         ctx.defer().await?;
         ctx.interaction
             .message
@@ -285,7 +286,7 @@ impl MultiSelect for Color {
         values: EnumSet<Self>,
         _module: &Self::Module,
         mut ctx: ComponentCtx,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         ctx.defer().await?;
         ctx.interaction
             .message
