@@ -12,7 +12,7 @@ impl Resolve for f32 {
     async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         match resolve_option(ctx.option)? {
             CommandDataOptionValue::Number(value) => Ok(value as _),
-            _ => Err(ResolveError::InvalidType),
+            _ => Err(ResolveError::InvalidType.into()),
         }
     }
 }
@@ -41,7 +41,9 @@ macro_rules! bounded_number {
             }
 
             async fn resolve(ctx: $crate::resolve::ResolveContext) -> $crate::resolve::ResolveResult<Self> {
-                <::std::primitive::f64 as $crate::resolve::Resolve>::resolve(ctx).await.and_then(Self::try_from)
+                Ok(<$name as ::std::convert::TryFrom::<::std::primitive::f64>>::try_from(
+                    <::std::primitive::f64 as $crate::resolve::Resolve>::resolve(ctx).await?,
+                )?)
             }
         }
 
@@ -60,7 +62,7 @@ macro_rules! bounded_number {
                 if min_ok && max_ok {
                     ::std::result::Result::Ok(Self(value))
                 } else {
-                    ::std::result::Result::Err($crate::resolve::ResolveError::NumberRangeError)?
+                    ::std::result::Result::Err($crate::resolve::ResolveError::NumberRangeError.into())
                 }
             }
         }

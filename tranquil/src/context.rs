@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use delegate::delegate;
 use serenity::{
     builder::{
@@ -10,36 +12,58 @@ use serenity::{
         application::interaction::{
             application_command::ApplicationCommandInteraction,
             autocomplete::AutocompleteInteraction, message_component::MessageComponentInteraction,
-            modal::ModalSubmitInteraction,
+            modal::ModalSubmitInteraction, InteractionResponseType,
         },
         channel::Message,
         id::MessageId,
     },
 };
 
-pub struct Ctx<T> {
+pub struct CommandCtx {
     pub bot: Context,
-    pub interaction: T,
+    pub interaction: Arc<ApplicationCommandInteraction>,
 }
-
-impl<T> AsRef<Http> for Ctx<T> {
-    fn as_ref(&self) -> &Http {
-        self.bot.as_ref()
-    }
-}
-
-impl<T: Send + Sync> CacheHttp for Ctx<T> {
-    fn http(&self) -> &Http {
-        self.bot.http()
-    }
-}
-
-pub type CommandCtx = Ctx<ApplicationCommandInteraction>;
-pub type AutocompleteCtx = Ctx<AutocompleteInteraction>;
-pub type ComponentCtx = Ctx<MessageComponentInteraction>;
-pub type ModalCtx = Ctx<ModalSubmitInteraction>;
 
 impl CommandCtx {
+    pub async fn create_response<'a, F>(self, f: F) -> serenity::Result<RespondedCommandCtx>
+    where
+        for<'b> F:
+            FnOnce(&'b mut CreateInteractionResponse<'a>) -> &'b mut CreateInteractionResponse<'a>,
+    {
+        self.interaction
+            .create_interaction_response(&self.bot, f)
+            .await?;
+        Ok(self.responded())
+    }
+
+    pub async fn defer(self) -> serenity::Result<RespondedCommandCtx> {
+        self.interaction.defer(&self.bot).await?;
+        Ok(self.responded())
+    }
+
+    pub async fn defer_ephemeral(self) -> serenity::Result<RespondedCommandCtx> {
+        self.create_response(|response| {
+            response
+                .kind(InteractionResponseType::DeferredChannelMessageWithSource)
+                .interaction_response_data(|data| data.ephemeral(true))
+        })
+        .await
+    }
+
+    fn responded(self) -> RespondedCommandCtx {
+        RespondedCommandCtx {
+            bot: self.bot,
+            interaction: self.interaction,
+        }
+    }
+}
+
+pub struct RespondedCommandCtx {
+    pub bot: Context,
+    pub interaction: Arc<ApplicationCommandInteraction>,
+}
+
+impl RespondedCommandCtx {
     delegate! {
         to self.interaction {
             #[call(get_interaction_response)]
@@ -47,17 +71,6 @@ impl CommandCtx {
                 &self,
                 [ &self.bot ],
             ) -> serenity::Result<Message>;
-
-            #[call(create_interaction_response)]
-            pub async fn create_response<'a, F>(
-                &self,
-                [ &self.bot ],
-                f: F,
-            ) -> serenity::Result<()>
-            where
-                for<'b> F: FnOnce(
-                    &'b mut CreateInteractionResponse<'a>,
-                ) -> &'b mut CreateInteractionResponse<'a>;
 
             #[call(edit_original_interaction_response)]
             pub async fn edit_response<F>(
@@ -109,11 +122,32 @@ impl CommandCtx {
                 [ &self.bot ],
                 message_id: impl Into<MessageId>,
             ) -> serenity::Result<Message>;
-
-            pub async fn defer(&self, [ &self.bot ]) -> serenity::Result<()>;
         }
     }
 }
+
+// TODO: State-Machine-ify
+
+pub struct Ctx<T> {
+    pub bot: Context,
+    pub interaction: T,
+}
+
+impl<T> AsRef<Http> for Ctx<T> {
+    fn as_ref(&self) -> &Http {
+        self.bot.as_ref()
+    }
+}
+
+impl<T: Send + Sync> CacheHttp for Ctx<T> {
+    fn http(&self) -> &Http {
+        self.bot.http()
+    }
+}
+
+pub type AutocompleteCtx = Ctx<AutocompleteInteraction>;
+pub type ComponentCtx = Ctx<MessageComponentInteraction>;
+pub type ModalCtx = Ctx<ModalSubmitInteraction>;
 
 impl AutocompleteCtx {
     delegate! {

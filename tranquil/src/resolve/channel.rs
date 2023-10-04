@@ -98,7 +98,7 @@ impl Resolve for GuildChannel {
     async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         match <Channel as Resolve>::resolve(ctx).await? {
             Channel::Guild(channel) => Ok(channel),
-            _ => Err(ResolveError::InvalidChannelType),
+            _ => Err(ResolveError::InvalidChannelType.into()),
         }
     }
 }
@@ -115,7 +115,7 @@ impl Resolve for PrivateChannel {
     async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         match <Channel as Resolve>::resolve(ctx).await? {
             Channel::Private(channel) => Ok(channel),
-            _ => Err(ResolveError::InvalidChannelType),
+            _ => Err(ResolveError::InvalidChannelType.into()),
         }
     }
 }
@@ -132,7 +132,7 @@ impl Resolve for ChannelCategory {
     async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         match <Channel as Resolve>::resolve(ctx).await? {
             Channel::Category(channel) => Ok(channel),
-            _ => Err(ResolveError::InvalidChannelType),
+            _ => Err(ResolveError::InvalidChannelType.into()),
         }
     }
 }

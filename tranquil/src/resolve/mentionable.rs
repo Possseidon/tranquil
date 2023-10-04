@@ -26,7 +26,7 @@ impl Resolve for Mentionable {
                 Ok(Self::User(user, partial_member))
             }
             CommandDataOptionValue::Role(role) => Ok(Self::Role(role)),
-            _ => Err(ResolveError::InvalidType),
+            _ => Err(ResolveError::InvalidType.into()),
         }
     }
 }
@@ -40,7 +40,7 @@ impl Resolve for Mention {
             CommandDataOptionValue::User(user, _) => Ok(Self::User(user.id)),
             CommandDataOptionValue::Role(role) => Ok(Self::Role(role.id)),
             // Mention can also store Channels and Emojis, which are not valid for CommandOptionType::Mentionable
-            _ => Err(ResolveError::InvalidType),
+            _ => Err(ResolveError::InvalidType.into()),
         }
     }
 }

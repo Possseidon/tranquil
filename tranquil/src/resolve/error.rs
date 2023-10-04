@@ -1,4 +1,4 @@
-use std::{convert::Infallible, num::TryFromIntError};
+use std::convert::Infallible;
 
 use thiserror::Error;
 
@@ -22,12 +22,6 @@ pub enum ResolveError {
     InvalidChoice,
     #[error("invalid channel type")]
     InvalidChannelType,
-    #[error(transparent)]
-    TryFromIntError(#[from] TryFromIntError),
-    #[error(transparent)]
-    Serenity(#[from] serenity::Error),
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
 }
 
 impl From<Infallible> for ResolveError {
@@ -36,4 +30,4 @@ impl From<Infallible> for ResolveError {
     }
 }
 
-pub type ResolveResult<T> = Result<T, ResolveError>;
+pub type ResolveResult<T> = anyhow::Result<T>;

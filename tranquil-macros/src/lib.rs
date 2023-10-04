@@ -387,7 +387,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                             let mut options = ::tranquil::resolve::find_options(
                                 [#(#parameter_names),*],
                                 ::tranquil::resolve::resolve_command_options(
-                                    ::std::mem::take(&mut ctx.interaction.data.options)
+                                    ctx.interaction.data.options.clone() // TODO: avoid clone?
                                 ),
                             ).into_iter();
                             #join_futures
@@ -475,7 +475,7 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
             let mut options = ::tranquil::resolve::find_options(
                 [#(#parameter_names),*],
                 ::tranquil::resolve::resolve_command_options(
-                    ::std::mem::take(&mut ctx.interaction.data.options)
+                    ctx.interaction.data.options.clone() // TODO: avoid clone?
                 ),
             ).into_iter();
             #join_futures

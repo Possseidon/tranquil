@@ -33,7 +33,7 @@ macro_rules! impl_resolve_for_integer {
                     CommandDataOptionValue::Integer(value) => {
                         Ok(<$t>::try_from(value)?)
                     }
-                    _ => Err(ResolveError::InvalidType),
+                    _ => Err(ResolveError::InvalidType.into()),
                 }
             }
         }
@@ -62,8 +62,8 @@ macro_rules! impl_resolve_for_bounded_integer {
                     CommandDataOptionValue::Integer(value) => Self::new(
                         <$t>::try_from(value)?,
                     )
-                    .ok_or(ResolveError::IntegerRangeError),
-                    _ => Err(ResolveError::InvalidType),
+                    .ok_or(ResolveError::IntegerRangeError.into()),
+                    _ => Err(ResolveError::InvalidType.into()),
                 }
             }
         }

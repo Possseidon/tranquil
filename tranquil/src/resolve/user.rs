@@ -16,7 +16,7 @@ impl Resolve for User {
     async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         match resolve_option(ctx.option)? {
             CommandDataOptionValue::User(value, _) => Ok(value),
-            _ => Err(ResolveError::InvalidType),
+            _ => Err(ResolveError::InvalidType.into()),
         }
     }
 }
@@ -28,8 +28,8 @@ impl Resolve for PartialMember {
     async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         match resolve_option(ctx.option)? {
             CommandDataOptionValue::User(_, Some(value)) => Ok(value),
-            CommandDataOptionValue::User(_, None) => Err(ResolveError::NoPartialMemberData),
-            _ => Err(ResolveError::InvalidType),
+            CommandDataOptionValue::User(_, None) => Err(ResolveError::NoPartialMemberData.into()),
+            _ => Err(ResolveError::InvalidType.into()),
         }
     }
 }

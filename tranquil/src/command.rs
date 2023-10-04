@@ -9,7 +9,9 @@ use anyhow::bail;
 use async_trait::async_trait;
 use futures::Future;
 use serenity::{
-    builder::{CreateApplicationCommand, CreateApplicationCommandOption},
+    builder::{
+        CreateApplicationCommand, CreateApplicationCommandOption, CreateInteractionResponseFollowup,
+    },
     model::application::{
         command::CommandOptionType, interaction::application_command::CommandData,
     },
@@ -166,36 +168,6 @@ impl<M: Module> Command for ModuleCommand<M> {
 
     async fn run(&self, ctx: CommandCtx) -> anyhow::Result<()> {
         (self.command_function)(self.module.clone(), ctx).await
-        // TODO: return a different type of error so e.g. invalid parameters can automatically be reported nicely like here:
-
-        /*
-        match parameter_from_interaction(&self.command_options, &interaction) {
-            Ok(parameter) => (self.function)(ctx, interaction, parameter).await,
-            Err(invalid_parameters) => {
-                interaction
-                    .create_interaction_response(&ctx.http, |response| {
-                        response.interaction_response_data(|data| {
-                            data.ephemeral(true).embed(|embed| {
-                                embed
-                                    .title(format!(
-                                        "Invalid parameters to `/{}`",
-                                        interaction.data.name
-                                    ))
-                                    .color(colors::css::DANGER)
-                                    .fields(invalid_parameters.iter().map(|invalid_parameter| {
-                                        (
-                                            format!("{}", &invalid_parameter.name),
-                                            format!("{}", invalid_parameter.error),
-                                            false,
-                                        )
-                                    }))
-                            })
-                        })
-                    })
-                    .await
-            }
-        }
-        */
     }
 
     async fn autocomplete(&self, ctx: AutocompleteCtx) -> anyhow::Result<()> {
@@ -204,6 +176,42 @@ impl<M: Module> Command for ModuleCommand<M> {
         } else {
             bail!("no autocomplete handler")
         }
+    }
+}
+
+pub(crate) struct CommandError(Box<dyn CommandErrorReporter>);
+
+pub trait CommandErrorReporter: std::error::Error + Send + Sync {
+    fn write_log(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
+    fn log_to_console(&self) -> bool;
+    fn build_response(&self, response: &mut CreateInteractionResponseFollowup);
+}
+
+impl Debug for CommandError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("CommandError").field(&self.0).finish()
+    }
+}
+
+impl Display for CommandError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.write_log(f)
+    }
+}
+
+impl std::error::Error for CommandError {}
+
+impl CommandErrorReporter for CommandError {
+    fn write_log(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.write_log(f)
+    }
+
+    fn log_to_console(&self) -> bool {
+        self.0.log_to_console()
+    }
+
+    fn build_response(&self, response: &mut CreateInteractionResponseFollowup) {
+        self.0.build_response(response)
     }
 }
 

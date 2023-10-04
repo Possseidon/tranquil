@@ -27,16 +27,20 @@ use serenity::{
         guild::{Guild, UnavailableGuild},
         id::GuildId,
     },
-    utils::colours as colors,
+    utils::colours,
     Client,
 };
 use uuid::Uuid;
 
 use crate::{
-    command::{CommandMap, CommandMapEntry, CommandPath, SubcommandMapEntry},
+    command::{
+        CommandError, CommandErrorReporter, CommandMap, CommandMapEntry, CommandPath,
+        SubcommandMapEntry,
+    },
     context::{AutocompleteCtx, CommandCtx, ComponentCtx, Ctx, ModalCtx},
     l10n::{CommandPathRef, L10n},
     module::Module,
+    resolve::ResolveError,
 };
 
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -244,26 +248,88 @@ impl Bot {
     async fn handle_command(&self, ctx: CommandCtx) -> anyhow::Result<()> {
         let command_path = CommandPath::resolve(&ctx.interaction.data);
 
-        match self.command_map.find_command(&command_path) {
-            Some(command) => command.run(ctx).await?,
-            None => {
-                ctx.create_response(|response| {
-                    response.interaction_response_data(|data| {
-                        data.embed(|embed| {
-                            embed.color(colors::css::DANGER).field(
-                                format!(":x: Unknown command: `/{command_path}`"),
-                                "Bot commands are likely outdated.".to_string(),
-                                false,
-                            )
-                        })
-                        .ephemeral(true)
+        let Some(command) = self.command_map.find_command(&command_path) else {
+            ctx.create_response(|response| {
+                response.interaction_response_data(|data| {
+                    data.embed(|embed| {
+                        embed
+                            .color(colours::css::DANGER)
+                            .title(format!(":x: Unknown command: `/{command_path}`"))
+                            .description("Bot commands are likely outdated.")
                     })
+                    .ephemeral(true)
                 })
-                .await?
-            }
-        }
+            })
+            .await?;
+            return Ok(());
+        };
 
-        Ok(())
+        let http = ctx.bot.http.clone();
+        let interaction = ctx.interaction.clone();
+
+        let Err(mut error) = command.run(ctx).await else {
+            return Ok(());
+        };
+
+        error = match error.downcast::<CommandError>() {
+            Ok(error) => {
+                let followup_result = interaction
+                    .create_followup_message(http, |message| {
+                        error.build_response(message);
+                        message
+                    })
+                    .await;
+
+                return if let Err(followup_error) = followup_result {
+                    Err(followup_error)
+                        .context("while trying to send followup message")
+                        .context(error)
+                } else if error.log_to_console() {
+                    Err(error.into())
+                } else {
+                    Ok(())
+                };
+            }
+            Err(error) => error,
+        };
+
+        error = match error.downcast::<ResolveError>() {
+            Ok(error) => {
+                let followup_result = interaction
+                    .create_followup_message(http, |message| {
+                        message.content("failed to resolve option")
+                    })
+                    .await;
+
+                return if let Err(followup_error) = followup_result {
+                    Err(followup_error)
+                        .context("while trying to send followup message")
+                        .context(error)
+                } else {
+                    Err(error.into())
+                };
+            }
+            Err(error) => error,
+        };
+
+        let followup_result = interaction
+            .create_followup_message(http, |message| {
+                message.embed(|embed| {
+                    embed
+                        .color(colours::css::DANGER)
+                        .title(":x: Internal Error")
+                        .description("Something went wrong...")
+                })
+            })
+            .await;
+
+        if let Err(followup_error) = followup_result {
+            Err(followup_error)
+                .context("while trying to send followup message")
+                .context(error)
+        } else {
+            Err(error)
+        }
     }
 
     fn parse_custom_id<'custom_id>(
@@ -468,7 +534,11 @@ impl EventHandler for Bot {
             match interaction {
                 Interaction::Ping(_) => {}
                 Interaction::ApplicationCommand(interaction) => {
-                    self.handle_command(Ctx { bot, interaction }).await?
+                    self.handle_command(CommandCtx {
+                        bot,
+                        interaction: Arc::new(interaction),
+                    })
+                    .await?;
                 }
                 Interaction::MessageComponent(interaction) => {
                     self.handle_message_component(Ctx { bot, interaction })

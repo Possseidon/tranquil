@@ -27,7 +27,7 @@ impl<T: Choices> Resolve for T {
     const KIND: CommandOptionType = CommandOptionType::String;
 
     async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
-        T::resolve(String::resolve(ctx).await?).ok_or(ResolveError::InvalidChoice)
+        T::resolve(String::resolve(ctx).await?).ok_or(ResolveError::InvalidChoice.into())
     }
 
     fn describe(option: &mut CreateApplicationCommandOption, l10n: &L10n) {
@@ -64,7 +64,9 @@ macro_rules! bounded_string {
             }
 
             async fn resolve(ctx: $crate::resolve::ResolveContext) -> $crate::resolve::ResolveResult<Self> {
-                <::std::string::String as $crate::resolve::Resolve>::resolve(ctx).await.and_then(Self::try_from)
+                Ok(<$name as ::std::convert::TryFrom<::std::string::String>>::try_from(
+                    <::std::string::String as $crate::resolve::Resolve>::resolve(ctx).await?,
+                )?)
             }
         }
 
@@ -83,7 +85,7 @@ macro_rules! bounded_string {
                 if min_ok && max_ok {
                     ::std::result::Result::Ok(Self(value))
                 } else {
-                    ::std::result::Result::Err($crate::resolve::ResolveError::StringLengthError)?
+                    ::std::result::Result::Err($crate::resolve::ResolveError::StringLengthError.into())
                 }
             }
         }

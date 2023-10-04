@@ -41,7 +41,7 @@ macro_rules! impl_resolve {
             async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
                 match resolve_option(ctx.option)? {
                     CommandDataOptionValue::$command_option_type(value) => Ok(value),
-                    _ => Err(ResolveError::InvalidType),
+                    _ => Err(ResolveError::InvalidType.into()),
                 }
             }
         }
@@ -76,8 +76,10 @@ pub use string::*;
 fn resolve_option(
     option: Option<CommandDataOption>,
 ) -> error::ResolveResult<CommandDataOptionValue> {
-    option.map_or(Err(error::ResolveError::Missing), |option| {
-        option.resolved.ok_or(error::ResolveError::Unresolvable)
+    option.map_or(Err(error::ResolveError::Missing.into()), |option| {
+        option
+            .resolved
+            .ok_or(error::ResolveError::Unresolvable.into())
     })
 }
 
