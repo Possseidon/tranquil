@@ -973,7 +973,7 @@ fn parse_select_menu_enum<'a>(
     }
 
     let Some(uuid_attr) = uuid_attr else {
-        return Err(missing_uuid(&enum_item.ident, uuid_attr_name))
+        return Err(missing_uuid(&enum_item.ident, uuid_attr_name));
     };
 
     let Ok(uuid) = uuid_attr.parse_args::<LitStr>() else {
@@ -992,7 +992,7 @@ fn parse_select_menu_enum<'a>(
     }
 
     let Some(module_attr) = module_attr else {
-        return Err(missing_module(&enum_item.ident))
+        return Err(missing_module(&enum_item.ident));
     };
 
     let Ok(module) = module_attr.parse_args::<TypePath>() else {
@@ -1019,7 +1019,9 @@ fn parse_select_menu_enum<'a>(
             return Err(missing_option(variant));
         };
 
-        let Ok(lit_list) = option_attr.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated) else {
+        let Ok(lit_list) =
+            option_attr.parse_args_with(Punctuated::<Expr, Token![,]>::parse_terminated)
+        else {
             return Err(invalid_option(option_attr));
         };
 
