@@ -1,3 +1,4 @@
+use anyhow::Result;
 use tranquil::{
     context::CommandCtx,
     macros::{command_provider, slash},
@@ -7,7 +8,7 @@ use tranquil::{
 #[derive(Module)]
 pub(crate) struct SubcommandModule;
 
-async fn pong(ctx: CommandCtx) -> anyhow::Result<()> {
+async fn pong(ctx: CommandCtx) -> Result<()> {
     ctx.create_response(|response| {
         response.interaction_response_data(|data| data.content("Pong!"))
     })
@@ -18,22 +19,22 @@ async fn pong(ctx: CommandCtx) -> anyhow::Result<()> {
 #[command_provider]
 impl SubcommandModule {
     #[slash]
-    async fn member_add(&self, ctx: CommandCtx) -> anyhow::Result<()> {
+    async fn member_add(&self, ctx: CommandCtx) -> Result<()> {
         pong(ctx).await
     }
 
     #[slash]
-    async fn member_delete(&self, ctx: CommandCtx) -> anyhow::Result<()> {
+    async fn member_delete(&self, ctx: CommandCtx) -> Result<()> {
         pong(ctx).await
     }
 
     #[slash]
-    async fn member_info_age(&self, ctx: CommandCtx) -> anyhow::Result<()> {
+    async fn member_info_age(&self, ctx: CommandCtx) -> Result<()> {
         pong(ctx).await
     }
 
     #[slash(rename = "member info nick-name")]
-    async fn member_info_nick_name(&self, ctx: CommandCtx) -> anyhow::Result<()> {
+    async fn member_info_nick_name(&self, ctx: CommandCtx) -> Result<()> {
         pong(ctx).await
     }
 }

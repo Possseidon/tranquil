@@ -3,12 +3,13 @@ mod example_module;
 
 use std::sync::Arc;
 
+use anyhow::Result;
 use tranquil::{
     command::CommandProvider,
     l10n::{L10n, Locale},
 };
 
-fn main() -> anyhow::Result<()> {
+fn main() -> Result<()> {
     let module = Arc::new(example_module::ExampleModule);
     let command_map = module.command_map()?;
 

@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use anyhow::bail;
+use anyhow::Result;
 use async_trait::async_trait;
 use enumset::{EnumSet, EnumSetType};
 use serde::{Deserialize, Serialize};
@@ -154,7 +155,7 @@ pub trait SelectMenuChoice: Sized + Send + 'static {
 
     fn create() -> CreateSelectMenu;
 
-    fn from_value(ctx: &str) -> anyhow::Result<Self>;
+    fn from_value(ctx: &str) -> Result<Self>;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -172,7 +173,7 @@ impl<T: Select + Sync> Interact for SelectHandler<T> {
 
     type Module = T::Module;
 
-    async fn interact(self, module: &Self::Module, ctx: ComponentCtx) -> anyhow::Result<()> {
+    async fn interact(self, module: &Self::Module, ctx: ComponentCtx) -> Result<()> {
         let values = &ctx.interaction.data.values;
 
         if values.len() != 1 {
@@ -185,7 +186,7 @@ impl<T: Select + Sync> Interact for SelectHandler<T> {
 
 #[async_trait]
 pub trait Select: SelectMenuChoice {
-    async fn select(self, module: &Self::Module, ctx: ComponentCtx) -> anyhow::Result<()>;
+    async fn select(self, module: &Self::Module, ctx: ComponentCtx) -> Result<()>;
 }
 
 pub use tranquil_macros::SelectMenuOptions;
@@ -198,7 +199,7 @@ pub trait SelectMenuOptions: EnumSetType + Sized + Send + 'static {
 
     fn create_multi() -> CreateSelectMenu;
 
-    fn from_values(ctx: &[String]) -> anyhow::Result<EnumSet<Self>>;
+    fn from_values(ctx: &[String]) -> Result<EnumSet<Self>>;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -219,7 +220,7 @@ where
 
     type Module = T::Module;
 
-    async fn interact(self, module: &Self::Module, ctx: ComponentCtx) -> anyhow::Result<()> {
+    async fn interact(self, module: &Self::Module, ctx: ComponentCtx) -> Result<()> {
         T::multi_select(T::from_values(&ctx.interaction.data.values)?, module, ctx).await
     }
 }
@@ -230,5 +231,5 @@ pub trait MultiSelect: SelectMenuOptions {
         values: EnumSet<Self>,
         module: &Self::Module,
         ctx: ComponentCtx,
-    ) -> anyhow::Result<()>;
+    ) -> Result<()>;
 }

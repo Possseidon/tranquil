@@ -1,3 +1,4 @@
+use anyhow::Result;
 use indoc::indoc;
 use tranquil::{
     autocomplete::{Autocomplete, Focusable},
@@ -11,11 +12,7 @@ pub(crate) struct AutocompleteModule;
 
 impl AutocompleteModule {
     #[autocompleter]
-    async fn autocomplete_echo_simple(
-        &self,
-        ctx: AutocompleteCtx,
-        value: String,
-    ) -> anyhow::Result<()> {
+    async fn autocomplete_echo_simple(&self, ctx: AutocompleteCtx, value: String) -> Result<()> {
         let you_typed = format!("You typed: {value}");
 
         ctx.create_response(|response| response.add_string_choice(you_typed, value))
@@ -32,7 +29,7 @@ impl AutocompleteModule {
         autocompleted: Focusable<Option<String>>,
         optional: Option<String>,
         optional_autocompleted: Option<String>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         let not_autocompleted_completion = format!("not_autocompleted: {not_autocompleted:?}");
         let autocompleted_completion = format!("autocompleted: {autocompleted:?}");
         let optional_completion = format!("optional: {optional:?}");
@@ -66,11 +63,7 @@ impl AutocompleteModule {
 #[command_provider]
 impl AutocompleteModule {
     #[slash(autocomplete)]
-    async fn echo_simple(
-        &self,
-        ctx: CommandCtx,
-        value: Autocomplete<String>,
-    ) -> anyhow::Result<()> {
+    async fn echo_simple(&self, ctx: CommandCtx, value: Autocomplete<String>) -> Result<()> {
         ctx.create_response(|response| {
             response
                 .interaction_response_data(|data| data.content(format!("```rust\n{value:?}\n```")))
@@ -87,7 +80,7 @@ impl AutocompleteModule {
         autocompleted: Autocomplete<String>,
         optional: Option<String>,
         optional_autocompleted: Autocomplete<Option<String>>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<()> {
         ctx.create_response(|response| {
             response.interaction_response_data(|data| {
                 data.content(format!(

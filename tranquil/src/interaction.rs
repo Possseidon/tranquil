@@ -1,3 +1,4 @@
+use anyhow::Result;
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use uuid::Uuid;
@@ -10,7 +11,7 @@ pub trait Interact: Serialize + DeserializeOwned {
 
     type Module: Module;
 
-    async fn interact(self, module: &Self::Module, ctx: ComponentCtx) -> anyhow::Result<()>;
+    async fn interact(self, module: &Self::Module, ctx: ComponentCtx) -> Result<()>;
 }
 
 #[macro_export]

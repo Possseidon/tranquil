@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::bail;
+use anyhow::{bail, Result};
 use async_trait::async_trait;
 use futures::Future;
 use serenity::{
@@ -90,9 +90,7 @@ impl Display for CommandPath {
 }
 
 type CommandFunction<M> = Box<
-    dyn Fn(Arc<M>, CommandCtx) -> Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send>>
-        + Send
-        + Sync,
+    dyn Fn(Arc<M>, CommandCtx) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send + Sync,
 >;
 
 pub type OptionBuilder = fn(&L10n) -> CreateApplicationCommandOption;
@@ -132,8 +130,8 @@ pub trait Command: Send + Sync {
     fn add_options(&self, l10n: &L10n, command: &mut CreateApplicationCommand);
     fn add_suboptions(&self, l10n: &L10n, option: &mut CreateApplicationCommandOption);
 
-    async fn run(&self, ctx: CommandCtx) -> anyhow::Result<()>;
-    async fn autocomplete(&self, ctx: AutocompleteCtx) -> anyhow::Result<()>;
+    async fn run(&self, ctx: CommandCtx) -> Result<()>;
+    async fn autocomplete(&self, ctx: AutocompleteCtx) -> Result<()>;
 }
 
 impl Debug for dyn Command {
@@ -164,7 +162,7 @@ impl<M: Module> Command for ModuleCommand<M> {
         }
     }
 
-    async fn run(&self, ctx: CommandCtx) -> anyhow::Result<()> {
+    async fn run(&self, ctx: CommandCtx) -> Result<()> {
         (self.command_function)(self.module.clone(), ctx).await
         // TODO: return a different type of error so e.g. invalid parameters can automatically be reported nicely like here:
 
@@ -198,7 +196,7 @@ impl<M: Module> Command for ModuleCommand<M> {
         */
     }
 
-    async fn autocomplete(&self, ctx: AutocompleteCtx) -> anyhow::Result<()> {
+    async fn autocomplete(&self, ctx: AutocompleteCtx) -> Result<()> {
         if let Some(autocomplete_function) = &self.autocomplete_function {
             autocomplete_function(self.module.clone(), ctx).await
         } else {
