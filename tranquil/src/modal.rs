@@ -8,7 +8,7 @@ use serenity::{
 use uuid::Uuid;
 
 use crate::{
-    context::{CommandCtx, ComponentCtx},
+    context::{command::CommandCtx, component::ComponentCtx},
     custom_id::custom_id_encode,
 };
 
@@ -176,7 +176,10 @@ impl RespondCtx for CommandCtx {
         for<'b> F: FnOnce(&'b mut CreateInteractionResponse<'a>) -> &'b mut CreateInteractionResponse<'a>
             + Send,
     {
-        self.create_response(f).await
+        self.interaction
+            .create_interaction_response(&self.bot, f)
+            .await?;
+        Ok(())
     }
 }
 
@@ -187,6 +190,9 @@ impl RespondCtx for ComponentCtx {
         for<'b> F: FnOnce(&'b mut CreateInteractionResponse<'a>) -> &'b mut CreateInteractionResponse<'a>
             + Send,
     {
-        self.create_response(f).await
+        self.interaction
+            .create_interaction_response(&self.bot, f)
+            .await?;
+        Ok(())
     }
 }

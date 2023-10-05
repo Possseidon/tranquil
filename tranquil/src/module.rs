@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     command::CommandProvider,
-    context::{ComponentCtx, ModalCtx},
+    context::{component::ComponentCtx, modal::ModalCtx},
     l10n::{L10n, L10nLoadError},
 };
 

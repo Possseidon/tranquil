@@ -9,7 +9,8 @@ use serenity::{builder::CreateSelectMenu, model::channel::ReactionType};
 use uuid::Uuid;
 
 use crate::{
-    context::ComponentCtx, custom_id::custom_id_encode, interaction::Interact, module::Module,
+    context::component::ComponentCtx, custom_id::custom_id_encode, interaction::Interact,
+    module::Module,
 };
 
 pub struct SelectMenu {

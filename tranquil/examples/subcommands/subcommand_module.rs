@@ -1,6 +1,6 @@
 use anyhow::Result;
 use tranquil::{
-    context::CommandCtx,
+    context::command::CommandCtx,
     macros::{command_provider, slash},
     module::Module,
 };
@@ -9,10 +9,8 @@ use tranquil::{
 pub(crate) struct SubcommandModule;
 
 async fn pong(ctx: CommandCtx) -> Result<()> {
-    ctx.create_response(|response| {
-        response.interaction_response_data(|data| data.content("Pong!"))
-    })
-    .await?;
+    ctx.respond(|response| response.interaction_response_data(|data| data.content("Pong!")))
+        .await?;
     Ok(())
 }
 

@@ -8,7 +8,7 @@ use serenity::builder::{CreateActionRow, CreateButton};
 use tokio::time::sleep;
 use tranquil::{
     button::{Button, ButtonColor, LinkButton},
-    context::{CommandCtx, ComponentCtx},
+    context::{command::CommandCtx, component::ComponentCtx},
     handle_interactions,
     interaction::Interact,
     macros::{command_provider, slash},
@@ -35,7 +35,7 @@ impl Module for InteractionModule {
 impl InteractionModule {
     #[slash]
     async fn buttons_link(&self, ctx: CommandCtx) -> Result<()> {
-        ctx.create_response(|response| {
+        ctx.respond(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
                     components.create_action_row(|row| row.add_button(youtube_button().create()))
@@ -49,7 +49,7 @@ impl InteractionModule {
 
     #[slash]
     async fn buttons_ping(&self, ctx: CommandCtx) -> Result<()> {
-        ctx.create_response(|response| {
+        ctx.respond(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
                     components.create_action_row(|row| row.add_button(PingButton::create()))
@@ -63,7 +63,7 @@ impl InteractionModule {
 
     #[slash]
     async fn buttons_counter(&self, ctx: CommandCtx) -> Result<()> {
-        ctx.create_response(|response| {
+        ctx.respond(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
                     components.set_action_row(CounterButton::create_row(5, true))
@@ -77,7 +77,7 @@ impl InteractionModule {
 
     #[slash]
     async fn select_choice(&self, ctx: CommandCtx) -> Result<()> {
-        ctx.create_response(|response| {
+        ctx.respond(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
                     components.create_action_row(|row| row.add_select_menu(Color::create()))
@@ -91,7 +91,7 @@ impl InteractionModule {
 
     #[slash]
     async fn select_options(&self, ctx: CommandCtx) -> Result<()> {
-        ctx.create_response(|response| {
+        ctx.respond(|response| {
             response.interaction_response_data(|data| {
                 data.components(|components| {
                     components.create_action_row(|row| row.add_select_menu(Color::create_multi()))
@@ -130,10 +130,8 @@ impl Interact for PingButton {
     type Module = InteractionModule;
 
     async fn interact(self, _module: &Self::Module, ctx: ComponentCtx) -> Result<()> {
-        ctx.create_response(|response| {
-            response.interaction_response_data(|data| data.content("Pong!"))
-        })
-        .await?;
+        ctx.respond(|response| response.interaction_response_data(|data| data.content("Pong!")))
+            .await?;
 
         Ok(())
     }
@@ -204,17 +202,17 @@ impl Interact for CounterButton {
             | ButtonAction::Decrement
             | ButtonAction::Increment
             | ButtonAction::PlusTen => {
-                ctx.defer().await?;
-                ctx.edit_response(|response| {
-                    response.components(|components| {
-                        components.set_action_row(Self::create_row(self.value, self.enabled))
+                ctx.defer()
+                    .await?
+                    .edit_response(|response| {
+                        response.components(|components| {
+                            components.set_action_row(Self::create_row(self.value, self.enabled))
+                        })
                     })
-                })
-                .await?;
+                    .await?;
             }
             ButtonAction::Confirm => {
-                ctx.defer().await?;
-
+                let ctx = ctx.defer().await?;
                 let mut message = ctx.interaction.message;
 
                 message
@@ -267,8 +265,8 @@ enum Color {
 
 #[async_trait]
 impl Select for Color {
-    async fn select(self, _module: &Self::Module, mut ctx: ComponentCtx) -> Result<()> {
-        ctx.defer().await?;
+    async fn select(self, _module: &Self::Module, ctx: ComponentCtx) -> Result<()> {
+        let mut ctx = ctx.defer().await?;
         ctx.interaction
             .message
             .edit(&ctx.bot, |edit| {
@@ -285,9 +283,9 @@ impl MultiSelect for Color {
     async fn multi_select(
         values: EnumSet<Self>,
         _module: &Self::Module,
-        mut ctx: ComponentCtx,
+        ctx: ComponentCtx,
     ) -> Result<()> {
-        ctx.defer().await?;
+        let mut ctx = ctx.defer().await?;
         ctx.interaction
             .message
             .edit(&ctx.bot, |edit| {

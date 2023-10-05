@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use tranquil::{
-    context::CommandCtx,
+    context::command::CommandCtx,
     l10n::{L10n, L10nLoadError},
     macros::{command_provider, slash},
     module::Module,
@@ -18,10 +18,8 @@ impl Module for ExampleModule {
 }
 
 async fn pong(ctx: CommandCtx) -> Result<()> {
-    ctx.create_response(|response| {
-        response.interaction_response_data(|data| data.content("Pong!"))
-    })
-    .await?;
+    ctx.respond(|response| response.interaction_response_data(|data| data.content("Pong!")))
+        .await?;
     Ok(())
 }
 

@@ -1,6 +1,7 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
     fmt::{Debug, Display},
+    mem::take,
     pin::Pin,
     sync::Arc,
 };
@@ -11,14 +12,15 @@ use futures::Future;
 use serenity::{
     builder::{CreateApplicationCommand, CreateApplicationCommandOption},
     model::application::{
-        command::CommandOptionType, interaction::application_command::CommandData,
+        command::CommandOptionType,
+        interaction::application_command::{CommandData, CommandDataOption},
     },
 };
 use thiserror::Error;
 
 use crate::{
     autocomplete::AutocompleteFunction,
-    context::{AutocompleteCtx, CommandCtx},
+    context::{autocomplete::AutocompleteCtx, command::CommandCtx},
     l10n::L10n,
     module::Module,
 };
@@ -90,7 +92,13 @@ impl Display for CommandPath {
 }
 
 type CommandFunction<M> = Box<
-    dyn Fn(Arc<M>, CommandCtx) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> + Send + Sync,
+    dyn Fn(
+            Arc<M>,
+            CommandCtx,
+            Vec<CommandDataOption>,
+        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>
+        + Send
+        + Sync,
 >;
 
 pub type OptionBuilder = fn(&L10n) -> CreateApplicationCommandOption;
@@ -162,8 +170,9 @@ impl<M: Module> Command for ModuleCommand<M> {
         }
     }
 
-    async fn run(&self, ctx: CommandCtx) -> Result<()> {
-        (self.command_function)(self.module.clone(), ctx).await
+    async fn run(&self, mut ctx: CommandCtx) -> Result<()> {
+        let options = take(&mut ctx.interaction.data.options);
+        (self.command_function)(self.module.clone(), ctx, options).await
         // TODO: return a different type of error so e.g. invalid parameters can automatically be reported nicely like here:
 
         /*
@@ -196,9 +205,10 @@ impl<M: Module> Command for ModuleCommand<M> {
         */
     }
 
-    async fn autocomplete(&self, ctx: AutocompleteCtx) -> Result<()> {
+    async fn autocomplete(&self, mut ctx: AutocompleteCtx) -> Result<()> {
         if let Some(autocomplete_function) = &self.autocomplete_function {
-            autocomplete_function(self.module.clone(), ctx).await
+            let options = take(&mut ctx.interaction.data.options);
+            autocomplete_function(self.module.clone(), ctx, options).await
         } else {
             bail!("no autocomplete handler")
         }

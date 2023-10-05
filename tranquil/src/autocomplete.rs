@@ -4,17 +4,24 @@ use anyhow::Result;
 use async_trait::async_trait;
 use futures::Future;
 use serenity::{
-    builder::CreateApplicationCommandOption, model::application::command::CommandOptionType,
+    builder::CreateApplicationCommandOption,
+    model::application::{
+        command::CommandOptionType, interaction::application_command::CommandDataOption,
+    },
 };
 
 use crate::{
-    context::AutocompleteCtx,
+    context::autocomplete::AutocompleteCtx,
     l10n::L10n,
     resolve::{Resolve, ResolveContext, ResolveResult},
 };
 
 pub(crate) type AutocompleteFunction<M> = Box<
-    dyn Fn(Arc<M>, AutocompleteCtx) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>
+    dyn Fn(
+            Arc<M>,
+            AutocompleteCtx,
+            Vec<CommandDataOption>,
+        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>
         + Send
         + Sync,
 >;
