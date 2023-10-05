@@ -12,7 +12,7 @@ use serenity::model::{
 };
 use tranquil::{
     bounded_number, bounded_string,
-    context::CommandCtx,
+    context::command::CommandCtx,
     macros::{command_provider, slash},
     module::Module,
     resolve::{
@@ -473,7 +473,7 @@ impl EchoModule {
 }
 
 async fn echo(ctx: CommandCtx, value: impl std::fmt::Debug) -> Result<()> {
-    ctx.create_response(|response| {
+    ctx.respond(|response| {
         response.interaction_response_data(|data| data.content(format!("```rust\n{value:#?}\n```")))
     })
     .await?;

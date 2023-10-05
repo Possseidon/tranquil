@@ -295,9 +295,9 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
         };
         quote! {
             ::std::option::Option::Some(
-                ::std::boxed::Box::new(|module, ctx| {
+                ::std::boxed::Box::new(|module, ctx, options| {
                     ::std::boxed::Box::pin(async move {
-                        module.#autocompleter_name(ctx).await
+                        module.#autocompleter_name(ctx, options).await
                     })
                 })
             )
@@ -376,19 +376,20 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
         #item_fn
 
         fn #name(
-            self: ::std::sync::Arc<Self>
-        ) -> (::tranquil::command::CommandPath, ::std::boxed::Box<dyn ::tranquil::command::Command>) {
+            self: ::std::sync::Arc<Self>,
+        ) -> (
+            ::tranquil::command::CommandPath,
+            ::std::boxed::Box<dyn ::tranquil::command::Command>,
+        ) {
             (
                 #command_path,
                 ::std::boxed::Box::new(::tranquil::command::ModuleCommand::new(
                     self,
-                    ::std::boxed::Box::new(|module, mut ctx| {
+                    ::std::boxed::Box::new(|module, ctx, options| {
                         ::std::boxed::Box::pin(async move {
                             let mut options = ::tranquil::resolve::find_options(
                                 [#(#parameter_names),*],
-                                ::tranquil::resolve::resolve_command_options(
-                                    ::std::mem::take(&mut ctx.interaction.data.options)
-                                ),
+                                ::tranquil::resolve::resolve_command_options(options),
                             ).into_iter();
                             #join_futures
                             module.#impl_name(ctx, #(#parameters),*).await
@@ -470,13 +471,14 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         async fn #name(
             &self,
-            mut ctx: ::tranquil::context::AutocompleteCtx,
+            ctx: ::tranquil::context::autocomplete::AutocompleteCtx,
+            options: ::std::vec::Vec<
+                ::tranquil::serenity::model::application::interaction::application_command::CommandDataOption
+            >,
         ) -> ::tranquil::anyhow::Result<()> {
             let mut options = ::tranquil::resolve::find_options(
                 [#(#parameter_names),*],
-                ::tranquil::resolve::resolve_command_options(
-                    ::std::mem::take(&mut ctx.interaction.data.options)
-                ),
+                ::tranquil::resolve::resolve_command_options(options),
             ).into_iter();
             #join_futures
             self.#impl_name(ctx, #(#parameters),*).await

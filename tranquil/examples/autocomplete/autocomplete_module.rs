@@ -2,7 +2,7 @@ use anyhow::Result;
 use indoc::indoc;
 use tranquil::{
     autocomplete::{Autocomplete, Focusable},
-    context::{AutocompleteCtx, CommandCtx},
+    context::{autocomplete::AutocompleteCtx, command::CommandCtx},
     macros::{autocompleter, command_provider, slash},
     module::Module,
 };
@@ -15,7 +15,7 @@ impl AutocompleteModule {
     async fn autocomplete_echo_simple(&self, ctx: AutocompleteCtx, value: String) -> Result<()> {
         let you_typed = format!("You typed: {value}");
 
-        ctx.create_response(|response| response.add_string_choice(you_typed, value))
+        ctx.autocomplete(|response| response.add_string_choice(you_typed, value))
             .await?;
 
         Ok(())
@@ -36,8 +36,8 @@ impl AutocompleteModule {
         let optional_autocompleted_completion =
             format!("optional_autocompleted: {optional_autocompleted:?}");
 
-        ctx.create_response(|response| {
-            response
+        ctx.autocomplete(|choices| {
+            choices
                 .add_string_choice(
                     not_autocompleted_completion,
                     not_autocompleted.unwrap_or_else(|| "empty".to_string()),
@@ -64,7 +64,7 @@ impl AutocompleteModule {
 impl AutocompleteModule {
     #[slash(autocomplete)]
     async fn echo_simple(&self, ctx: CommandCtx, value: Autocomplete<String>) -> Result<()> {
-        ctx.create_response(|response| {
+        ctx.respond(|response| {
             response
                 .interaction_response_data(|data| data.content(format!("```rust\n{value:?}\n```")))
         })
@@ -81,7 +81,7 @@ impl AutocompleteModule {
         optional: Option<String>,
         optional_autocompleted: Autocomplete<Option<String>>,
     ) -> Result<()> {
-        ctx.create_response(|response| {
+        ctx.respond(|response| {
             response.interaction_response_data(|data| {
                 data.content(format!(
                     indoc! {r#"
