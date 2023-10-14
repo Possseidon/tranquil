@@ -74,6 +74,22 @@ impl Default for Bot {
     }
 }
 
+pub trait IntoArcModule {
+    fn into_arc_module(self) -> Arc<dyn Module>;
+}
+
+impl<T: Module + 'static> IntoArcModule for T {
+    fn into_arc_module(self) -> Arc<dyn Module> {
+        Arc::new(self)
+    }
+}
+
+impl<T: Module + 'static> IntoArcModule for Arc<T> {
+    fn into_arc_module(self) -> Arc<dyn Module> {
+        self
+    }
+}
+
 impl Bot {
     pub fn new() -> Self {
         Default::default()
@@ -87,8 +103,8 @@ impl Bot {
         self
     }
 
-    pub fn register(mut self, module: impl Module + 'static) -> Self {
-        self.modules.push(Arc::new(module));
+    pub fn register(mut self, module: impl IntoArcModule) -> Self {
+        self.modules.push(module.into_arc_module());
         self
     }
 
