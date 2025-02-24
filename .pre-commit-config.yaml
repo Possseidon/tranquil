@@ -3,7 +3,7 @@
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v5.0.0
     hooks:
       - id: check-added-large-files # default > 500kB, lfs excluded
       - id: check-case-conflict
@@ -18,7 +18,7 @@ repos:
     hooks:
       - id: fmt
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.27.1
+    rev: 0.31.2
     hooks:
       - id: check-github-workflows
 
