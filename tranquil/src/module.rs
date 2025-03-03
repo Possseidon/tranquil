@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use serenity::model::gateway::GatewayIntents;
+pub use tranquil_macros::Module;
 use uuid::Uuid;
 
 use crate::{
@@ -8,8 +9,6 @@ use crate::{
     context::{component::ComponentCtx, modal::ModalCtx},
     l10n::{L10n, L10nLoadError},
 };
-
-pub use tranquil_macros::Module;
 
 #[async_trait]
 pub trait Module: CommandProvider + Send + Sync {

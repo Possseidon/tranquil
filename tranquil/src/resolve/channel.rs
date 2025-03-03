@@ -10,9 +10,8 @@ use serenity::{
     },
 };
 
-use crate::l10n::L10n;
-
 use super::{Resolve, ResolveContext, ResolveError, ResolveResult};
+use crate::l10n::L10n;
 
 macro_rules! make_partial_channels {
     { $( $channel:ident => $channel_type:ident ),* $(,)? } => { $(

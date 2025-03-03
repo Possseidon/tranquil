@@ -61,7 +61,7 @@ impl<T: Resolve> Resolve for Focusable<T> {
 
     async fn resolve(ctx: ResolveContext) -> ResolveResult<Self> {
         Ok(Focusable {
-            has_focus: ctx.option.as_ref().map_or(false, |option| option.focused),
+            has_focus: ctx.option.as_ref().is_some_and(|option| option.focused),
             current: T::resolve(ctx).await?,
         })
     }

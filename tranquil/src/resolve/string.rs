@@ -3,9 +3,8 @@ use serenity::{
     builder::CreateApplicationCommandOption, model::application::command::CommandOptionType,
 };
 
-use crate::l10n::L10n;
-
 use super::{Resolve, ResolveContext, ResolveError, ResolveResult};
+use crate::l10n::L10n;
 
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Choice {

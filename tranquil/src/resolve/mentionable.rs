@@ -39,7 +39,8 @@ impl Resolve for Mention {
         match resolve_option(ctx.option)? {
             CommandDataOptionValue::User(user, _) => Ok(Self::User(user.id)),
             CommandDataOptionValue::Role(role) => Ok(Self::Role(role.id)),
-            // Mention can also store Channels and Emojis, which are not valid for CommandOptionType::Mentionable
+            // Mention can also store Channels and Emojis, which are not valid for
+            // CommandOptionType::Mentionable
             _ => Err(ResolveError::InvalidType),
         }
     }

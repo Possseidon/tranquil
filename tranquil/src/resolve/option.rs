@@ -3,9 +3,8 @@ use serenity::{
     builder::CreateApplicationCommandOption, model::application::command::CommandOptionType,
 };
 
-use crate::l10n::L10n;
-
 use super::{Resolve, ResolveContext, ResolveResult};
+use crate::l10n::L10n;
 
 #[async_trait]
 impl<T: Resolve> Resolve for Option<T> {

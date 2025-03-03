@@ -176,7 +176,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
             match nested_meta {
                 Meta::NameValue(MetaNameValue { path, value, .. }) => {
                     let ident = path.get_ident();
-                    if ident.map_or(false, |ident| ident == "rename") {
+                    if ident.is_some_and(|ident| ident == "rename") {
                         match value {
                             Expr::Lit(ExprLit {
                                 lit: Lit::Str(lit_str),
@@ -193,7 +193,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                             }
                             _ => errors.push(invalid_rename_literal(&value)),
                         }
-                    } else if ident.map_or(false, |ident| ident == "autocomplete") {
+                    } else if ident.is_some_and(|ident| ident == "autocomplete") {
                         match value {
                             Expr::Lit(ExprLit {
                                 lit: Lit::Str(lit_str),
@@ -219,9 +219,9 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
                 Meta::Path(path) => {
                     let ident = path.get_ident();
-                    if ident.map_or(false, |ident| ident == "default") {
+                    if ident.is_some_and(|ident| ident == "default") {
                         attributes.default = ident;
-                    } else if ident.map_or(false, |ident| ident == "autocomplete") {
+                    } else if ident.is_some_and(|ident| ident == "autocomplete") {
                         attributes.autocomplete = Some(Autocomplete::DefaultName);
                     } else {
                         errors.push(invalid_attribute(&nested_meta));
@@ -390,7 +390,7 @@ pub fn slash(attr: TokenStream, item: TokenStream) -> TokenStream {
                             let mut options = ::tranquil::resolve::find_options(
                                 [#(#parameter_names),*],
                                 ::tranquil::resolve::resolve_command_options(options),
-                            ).into_iter();
+                            );
                             #join_futures
                             module.#impl_name(ctx, #(#parameters),*).await
                         })
@@ -479,7 +479,7 @@ pub fn autocompleter(attr: TokenStream, item: TokenStream) -> TokenStream {
             let mut options = ::tranquil::resolve::find_options(
                 [#(#parameter_names),*],
                 ::tranquil::resolve::resolve_command_options(options),
-            ).into_iter();
+            );
             #join_futures
             self.#impl_name(ctx, #(#parameters),*).await
         }

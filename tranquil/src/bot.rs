@@ -109,7 +109,8 @@ impl Bot {
     }
 
     pub async fn run(mut self, discord_token: impl AsRef<str>) -> Result<()> {
-        // TODO: Token validation doesn't work, because of the middle "timestamp" part not always being valid base64.
+        // TODO: Token validation doesn't work, because of the middle "timestamp" part not always
+        // being valid base64.
         // validate_token(&token).map_err(|err| {
         //     eprintln!("{err}");
         //     err

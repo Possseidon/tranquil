@@ -81,25 +81,16 @@ fn resolve_option(
     })
 }
 
-pub fn find_options<'a>(
-    names: impl IntoIterator<Item = &'a str>,
-    options: impl IntoIterator<Item = CommandDataOption>,
-) -> Vec<Option<CommandDataOption>> {
-    let mut options: Vec<Option<CommandDataOption>> = options.into_iter().map(Some).collect();
-    names
-        .into_iter()
-        .map(|name| {
-            options
-                .iter_mut()
-                .find_map(|option| match option {
-                    Some(CommandDataOption {
-                        name: option_name, ..
-                    }) if option_name == name => option.take(),
-                    _ => None,
-                })
-                .take()
-        })
-        .collect()
+pub fn find_options<'a, I: IntoIterator<Item = &'a str>>(
+    names: I,
+    mut options: Vec<CommandDataOption>,
+) -> impl Iterator<Item = Option<CommandDataOption>> + use<'a, I> {
+    names.into_iter().map(move |name| {
+        options
+            .iter()
+            .position(|option| option.name == name)
+            .map(|index| options.swap_remove(index))
+    })
 }
 
 pub fn resolve_command_options(mut options: Vec<CommandDataOption>) -> Vec<CommandDataOption> {

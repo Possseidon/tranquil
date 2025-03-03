@@ -6,9 +6,8 @@ use serenity::{
     },
 };
 
-use crate::l10n::L10n;
-
 use super::{resolve_option, Resolve, ResolveContext, ResolveError, ResolveResult};
+use crate::l10n::L10n;
 
 pub const DISCORD_MIN_INTEGER: i64 = -9007199254740991;
 pub const DISCORD_MAX_INTEGER: i64 = 9007199254740991;
@@ -19,6 +18,7 @@ macro_rules! impl_resolve_for_integer {
         impl Resolve for $t {
             const KIND: CommandOptionType = CommandOptionType::Integer;
 
+            #[allow(irrefutable_let_patterns)]
             fn describe(option: &mut CreateApplicationCommandOption, _l10n: &L10n) {
                 if let Ok(min) = i64::try_from(<$t>::MIN) {
                     option.min_int_value(min.max(DISCORD_MIN_INTEGER));
@@ -48,6 +48,7 @@ macro_rules! impl_resolve_for_bounded_integer {
         impl<const MIN: $t, const MAX: $t> Resolve for bounded_integer::$b<MIN, MAX> {
             const KIND: CommandOptionType = CommandOptionType::Integer;
 
+            #[allow(irrefutable_let_patterns)]
             fn describe(option: &mut CreateApplicationCommandOption, _l10n: &L10n) {
                 if let Ok(min) = i64::try_from(<$t>::MIN) {
                     option.min_int_value(min.max(DISCORD_MIN_INTEGER));

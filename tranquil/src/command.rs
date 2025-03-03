@@ -173,7 +173,8 @@ impl<M: Module> Command for ModuleCommand<M> {
     async fn run(&self, mut ctx: CommandCtx) -> Result<()> {
         let options = take(&mut ctx.interaction.data.options);
         (self.command_function)(self.module.clone(), ctx, options).await
-        // TODO: return a different type of error so e.g. invalid parameters can automatically be reported nicely like here:
+        // TODO: return a different type of error so e.g. invalid parameters can automatically be
+        // reported nicely like here:
 
         /*
         match parameter_from_interaction(&self.command_options, &interaction) {

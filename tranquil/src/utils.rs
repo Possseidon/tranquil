@@ -36,9 +36,8 @@ pub fn discord_token_from_env_var(key: impl AsRef<OsStr>) -> Result<String, env:
 pub fn debug_guilds_from_env_var(
     key: impl AsRef<OsStr>,
 ) -> Result<Option<ApplicationCommandUpdate>> {
-    debug_guilds_from_env_var_silent(&key).map_err(|error| {
+    debug_guilds_from_env_var_silent(&key).inspect_err(|_| {
         eprintln!("{} invalid", key.as_ref().to_string_lossy());
-        error
     })
 }
 
