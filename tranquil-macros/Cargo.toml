@@ -13,10 +13,10 @@ categories = []
 proc-macro = true
 
 [dependencies]
-indoc = "2.0.4"
-itertools = "0.12.0"
-quote = { version = "1.0.33", default-features = false }
-syn = { version = "2.0.37", default-features = false, features = [
+indoc = "2.0.5"
+itertools = "0.14.0"
+quote = { version = "1.0.39", default-features = false }
+syn = { version = "2.0.99", default-features = false, features = [
     "clone-impls",
     "full",
     "parsing",
