@@ -11,20 +11,15 @@ keywords = ["bot", "commands", "discord", "framework", "serenity"]
 categories = ["api-bindings"]
 
 [dependencies]
+anyhow = "1.0.97"
 bounded-integer = { version = "0.5.8", features = ["types"] }
-dotenvy = "0.15.7"
-serenity = { version = "0.12.4", default-features = false, features = [
-    "client",
-    "gateway",
-    "model",
-    "rustls_backend",
-] }
+serenity = "0.12.4"
 thiserror = "2.0.12"
-tokio = { version = "1.43.0", default-features = false, features = ["signal"] }
+tracing = "0.1.41"
 tranquil-macros = { version = "0.3.0", path = "../tranquil-macros" }
 uuid = { version = "1.15.1", features = ["v4"] }
 
 [dev-dependencies]
-tokio = { version = "1.43.0", default-features = false, features = [
-    "rt-multi-thread",
-] }
+dotenvy = "0.15.7"
+tokio = { version = "1.43.0", features = ["rt-multi-thread", "signal"] }
+tracing-subscriber = "0.3.19"
