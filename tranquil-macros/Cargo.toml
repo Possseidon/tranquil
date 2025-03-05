@@ -1,8 +1,8 @@
 [package]
 name = "tranquil-macros"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Possseidon <xpossseidon@gmail.com>"]
-edition = "2021"
+edition = "2024"
 description = "Macro crate for tranquil."
 repository = "https://github.com/Possseidon/tranquil"
 license = "MIT"
@@ -13,8 +13,7 @@ categories = []
 proc-macro = true
 
 [dependencies]
-indoc = "2.0.5"
-itertools = "0.14.0"
+darling = "0.20.10"
 quote = { version = "1.0.39", default-features = false }
 syn = { version = "2.0.99", default-features = false, features = [
     "clone-impls",
