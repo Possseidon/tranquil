@@ -1,4 +1,3 @@
-use anyhow::Result;
 use serenity::all::{Context, ModalInteraction};
 
 use super::CustomIdAssignment;

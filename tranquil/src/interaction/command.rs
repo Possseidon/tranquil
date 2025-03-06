@@ -1,9 +1,10 @@
 pub mod option;
 
-use anyhow::Result;
 use serenity::all::{CommandInteraction, Context, CreateAutocompleteResponse, CreateCommand};
 use thiserror::Error;
 pub use tranquil_macros::Command;
+
+use super::error::Result;
 
 pub trait Command: Run + Sized {
     /// Should be the same as [`CreateCommand::name`].
@@ -11,9 +12,13 @@ pub trait Command: Run + Sized {
     /// Used to match against commands returned from the endpoint upon creation.
     const NAME: &str;
 
+    /// A separate type containing all commands that have autocomplete options.
+    ///
+    /// [`NoAutocomplete`] if none of the commands have any autocompleted option.
     type Autocomplete: Autocomplete;
 
-    fn create_command() -> CreateCommand;
+    /// Returns a builder for this command which can be sent to Discord.
+    fn create() -> CreateCommand;
 
     fn resolve_autocomplete(data: &mut CommandInteraction) -> Result<Self::Autocomplete>;
 
@@ -25,7 +30,7 @@ pub trait Run {
         self,
         ctx: Context,
         interaction: CommandInteraction,
-    ) -> impl Future<Output = Result<(), RunError>> + Send;
+    ) -> impl Future<Output = Result<()>> + Send;
 }
 
 pub trait Autocomplete {
@@ -33,7 +38,7 @@ pub trait Autocomplete {
         self,
         ctx: Context,
         interaction: CommandInteraction,
-    ) -> impl Future<Output = Result<CreateAutocompleteResponse, AutocompleteError>> + Send;
+    ) -> impl Future<Output = Result<CreateAutocompleteResponse>> + Send;
 }
 
 pub enum NoAutocomplete {}
@@ -43,7 +48,7 @@ impl Autocomplete for NoAutocomplete {
         self,
         _ctx: Context,
         _interaction: CommandInteraction,
-    ) -> Result<CreateAutocompleteResponse, AutocompleteError> {
+    ) -> Result<CreateAutocompleteResponse> {
         match self {}
     }
 }
@@ -56,12 +61,6 @@ pub enum AutocompleteResolveError {
     #[error("the command does not support autocompletion")]
     NoAutocomplete,
 }
-
-#[derive(Debug, Error)]
-pub enum RunError {}
-
-#[derive(Debug, Error)]
-pub enum AutocompleteError {}
 
 // pub(super) struct CommandFns {
 //     pub(super) name: &'static str,

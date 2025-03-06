@@ -2,8 +2,6 @@ pub mod interaction;
 pub mod locale;
 
 // Re-exported for tranquil-macros
-pub use anyhow;
-// Re-exported for tranquil-macros
 pub use serenity;
 use serenity::{
     all::{

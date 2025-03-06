@@ -1,123 +1,82 @@
-use std::{
-    mem::take,
-    num::{NonZero, NonZeroU16},
+pub mod attachment;
+pub mod autocomplete;
+pub mod boolean;
+pub mod channel;
+pub mod integer;
+pub mod mentionable;
+pub mod number;
+pub mod role;
+pub mod string;
+pub mod user;
+
+use serenity::all::{
+    CommandDataOptionValue, CommandDataResolved, CommandOptionType, CreateCommandOption,
 };
 
-use anyhow::Result;
-use serenity::all::{CommandDataOptionValue, CommandOptionType, CreateCommandOption};
-use thiserror::Error;
+use crate::interaction::error::{DiscordError, Result};
 
-pub trait CommandOption: Resolve {
-    /// Customizes [`CreateCommandOption`] for this type.
-    ///
-    /// - [`CreateCommandOption::name`], [`CreateCommandOption::description`] and also
-    ///   [`CreateCommandOption::kind`] must be set by the caller (before or after).
-    /// - [`CreateCommandOption::required`] must be set to `true` initially and will be set to
-    ///   `false` for [`Option`] types.
-    fn create_command_option(create_command_option: CreateCommandOption) -> CreateCommandOption {
-        create_command_option
-    }
-}
-
-pub trait Resolve: Sized {
+pub trait CommandOption {
     const KIND: CommandOptionType;
 
-    fn resolve(data: &mut CommandDataOptionValue) -> Result<Self>;
-}
+    /// Returns a [`CreateCommandOption`] with all relevant client-side validation.
+    fn create(name: String, description: String) -> CreateCommandOption {
+        Self::add_validation(CreateCommandOption::new(Self::KIND, name, description).required(true))
+    }
 
-impl CommandOption for String {}
+    /// Adds validation to the given [`CreateCommandOption`].
+    fn add_validation(create_command_option: CreateCommandOption) -> CreateCommandOption {
+        create_command_option
+    }
 
-impl Resolve for String {
-    const KIND: CommandOptionType = CommandOptionType::String;
-
-    fn resolve(data: &mut CommandDataOptionValue) -> Result<Self> {
-        if let CommandDataOptionValue::String(data) = data {
-            Ok(take(data))
-        } else {
-            Err(unexpected_type::<Self>(data))
+    fn unexpected_type(data: &CommandDataOptionValue) -> DiscordError {
+        DiscordError::UnexpectedOptionType {
+            expected: Self::KIND,
+            got: data.kind(),
         }
-    }
-}
-
-impl CommandOption for i64 {}
-
-impl Resolve for i64 {
-    const KIND: CommandOptionType = CommandOptionType::Integer;
-
-    fn resolve(data: &mut CommandDataOptionValue) -> Result<Self> {
-        data.as_i64().ok_or(unexpected_type::<Self>(data))
-    }
-}
-
-impl CommandOption for f64 {}
-
-impl Resolve for f64 {
-    const KIND: CommandOptionType = CommandOptionType::Number;
-
-    fn resolve(data: &mut CommandDataOptionValue) -> Result<Self> {
-        data.as_f64().ok_or(unexpected_type::<Self>(data))
     }
 }
 
 impl<T: CommandOption> CommandOption for Option<T> {
-    fn create_command_option(create_command_option: CreateCommandOption) -> CreateCommandOption {
-        create_command_option.required(false)
+    const KIND: CommandOptionType = T::KIND;
+
+    fn add_validation(create_command_option: CreateCommandOption) -> CreateCommandOption {
+        T::add_validation(create_command_option).required(false)
     }
 }
 
-impl<T: Resolve> Resolve for Option<T> {
-    const KIND: CommandOptionType = T::KIND;
-
-    fn resolve(data: &mut CommandDataOptionValue) -> Result<Self> {
-        todo!("huh? is the thing just omitted entirely?");
-    }
+pub trait Unvalidated {
+    /// Set to [`NotAutocompletable`] for anything that isn't a string, integer or number.
+    type Unvalidated: ResolveRequired;
 }
 
-pub enum Autocompleted<T> {
-    Unfocused(T),
-    Focused(String),
+impl<T: ResolveRequired> Unvalidated for Option<T> {
+    type Unvalidated = T;
 }
 
-// - if there is any option tagged with `autocomplete`, a copy of that command is created in the
-//   Autocomplete type
-// - any options that are tagged with `autocomplete` are turned into Autocompleted<T>
-// - other options are taken as is
-//
-// check if min/max for string/number/int is upheld; if not, T needs to turn into some relaxed type
-// that is okay with all values (likely including null)
-//
-// this type is then used by Autcompleted::Unfocused and used as is for non-autocompleted options in
-// commands with any autocompleted option
+pub trait Resolve: Sized {
+    fn resolve(data: Option<&mut CommandDataOptionValue>) -> Result<Self>;
+}
 
-impl<T: Resolve> Resolve for Autocompleted<T> {
-    const KIND: CommandOptionType = T::KIND;
-
-    fn resolve(data: &mut CommandDataOptionValue) -> Result<Self> {
-        if let CommandDataOptionValue::Autocomplete { kind, value } = data {
-            if *kind == T::KIND {
-                Ok(Self::Focused(take(value)))
-            } else {
-                Err(unexpected_type::<T>(data))
-            }
+impl<T: ResolveRequired> Resolve for T {
+    fn resolve(data: Option<&mut CommandDataOptionValue>) -> Result<Self> {
+        if let Some(data) = data {
+            T::resolve(data)
         } else {
-            Ok(Self::Unfocused(T::resolve(data)?))
+            Err(DiscordError::MissingRequiredOption.into())
         }
     }
 }
 
-#[derive(Debug, Error)]
-pub enum OptionResolveError {
-    #[error("cannot resolve option due to wrong type")]
-    UnexpectedType {
-        expected: CommandOptionType,
-        got: CommandOptionType,
-    },
+impl<T: ResolveRequired> Resolve for Option<T> {
+    fn resolve(data: Option<&mut CommandDataOptionValue>) -> Result<Self> {
+        Ok(if let Some(data) = data {
+            Some(T::resolve(data)?)
+        } else {
+            None
+        })
+    }
 }
 
-fn unexpected_type<T: Resolve>(data: &CommandDataOptionValue) -> anyhow::Error {
-    OptionResolveError::UnexpectedType {
-        expected: T::KIND,
-        got: data.kind(),
-    }
-    .into()
+pub trait ResolveRequired: Sized {
+    fn resolve(data: &mut CommandDataOptionValue) -> Result<Self>;
 }

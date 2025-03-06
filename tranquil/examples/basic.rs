@@ -1,12 +1,15 @@
 use serenity::{
     Client,
-    all::{CommandInteraction, GatewayIntents},
+    all::{CommandInteraction, GatewayIntents, User, UserId},
     prelude::Context,
 };
 use tokio::{select, signal};
 use tranquil::{
     Tranquil,
-    interaction::command::{Command, Run, RunError},
+    interaction::{
+        command::{Command, Run},
+        error::Result,
+    },
 };
 
 // #[derive(Command)]
@@ -26,12 +29,49 @@ use tranquil::{
 //     },
 // }
 
-#[derive(Command)]
-#[tranquil(description("le ping"))]
-struct Ping {}
+// #[derive(Command)]
+// #[tranquil(description("le permission control"))]
+// enum PermissionControl {
+//     #[tranquil(
+//         name(de = "neu-hinzufügen"),
+//         description(
+//             "Add a new permission to a user",
+//             de = "Einem Benutzer eine neue Berechtigung hinzufügen",
+//             en_US = "Interesting",
+//         )
+//     )]
+//     AddNew {
+//         #[tranquil(description("crazy user"))]
+//         user: UserId,
+//         #[tranquil(description("crazy permission"))]
+//         permission: String,
+//     },
+//     #[tranquil(description("remove an old permission"))]
+//     RemoveOld,
+// }
 
-impl Run for Ping {
-    async fn run(self, ctx: Context, interaction: CommandInteraction) -> Result<(), RunError> {
+/// Control the color of a user
+///
+/// - `en_GB` `colour` Add a member to a colour and yeah this is actually a really long description
+///   that I am going to write. I want it to be even longer just so that I can get some more
+///   wrapping
+/// - `de` `mitglied` Füge Mitglieder hinzu oder entferne sie
+/// - `fr` `francais` Je ne parle pas français
+/// - `jp` `色` ユーザーの色
+#[derive(Command)]
+enum ColorCrazy {
+    /// `get awesome-user` Get the color of a user
+    GetAwesomeUser { user: UserId },
+    /// `get-awesome user` Get the color of a user
+    GetAwesomeUser2 { user: UserId },
+    /// Set the color of a user
+    Set { user: UserId, color: String },
+    /// Clear the color of a user
+    Clear { user: UserId },
+}
+
+impl Run for ColorCrazy {
+    async fn run(self, ctx: Context, interaction: CommandInteraction) -> Result<()> {
         todo!()
     }
 }

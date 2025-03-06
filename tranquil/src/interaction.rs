@@ -1,6 +1,7 @@
 use uuid::{NonNilUuid, Uuid};
 
 pub mod command;
+pub mod error;
 // pub mod component;
 // pub mod modal;
 
