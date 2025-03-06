@@ -1,6 +1,6 @@
 use serenity::{
     Client,
-    all::{CommandInteraction, GatewayIntents, User, UserId},
+    all::{CommandInteraction, GatewayIntents, UserId},
     prelude::Context,
 };
 use tokio::{select, signal};
@@ -50,7 +50,8 @@ use tranquil::{
 //     RemoveOld,
 // }
 
-/// Control the color of a user
+/// `füge-mitglieder-hinzu-oder`
+/// bli blub
 ///
 /// - `en_GB` `colour` Add a member to a colour and yeah this is actually a really long description
 ///   that I am going to write. I want it to be even longer just so that I can get some more

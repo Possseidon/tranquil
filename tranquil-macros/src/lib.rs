@@ -5,12 +5,12 @@ use darling::{
     FromDeriveInput, FromField, FromVariant,
     ast::{Data, Fields},
 };
+use itertools::Itertools;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use syn::{
-    Attribute, DeriveInput, Expr, ExprLit, Ident, Lit, LitStr, Type, parse_macro_input,
-    spanned::Spanned,
+    Attribute, DeriveInput, Expr, ExprLit, Ident, Lit, Type, parse_macro_input, spanned::Spanned,
 };
 use unicode_script::{Script, UnicodeScript};
 
@@ -45,7 +45,7 @@ impl CommandMeta {
     fn into_impl_command(self) -> TokenStream {
         let type_name = &self.ident;
 
-        let name_description = match NameDescription::parse(&self.attrs, type_name) {
+        let name_description = match NameDescription::parse(&self.attrs, type_name, false) {
             Ok(name_description) => name_description,
             Err(error) => return error.into_compile_error().into(),
         };
@@ -141,27 +141,28 @@ impl NameDescription {
     /// ///   welche ebenfalls mehrere Zeilen haben kann
     /// /// - `fr` Command name translation is optional
     /// ```
-    fn parse(attrs: &[Attribute], ident: &Ident) -> syn::Result<Self> {
+    fn parse(attrs: &[Attribute], ident: &Ident, allow_sub_name: bool) -> syn::Result<Self> {
         let mut lines = attrs
             .iter()
             // doc attributes are technically already filtered out by darling
             .filter(|attr| attr.path().is_ident("doc"))
             .map(|attr| {
+                let span = attr.span();
                 if let Expr::Lit(ExprLit {
                     lit: Lit::Str(lit_str),
                     ..
                 }) = &attr.meta.require_name_value()?.value
                 {
-                    Ok((lit_str.value().trim().to_string(), attr.span()))
+                    Ok((lit_str.value().trim().to_string(), span))
                 } else {
-                    Err(syn::Error::new(attr.span(), "malformed doc comment"))
+                    Err(syn::Error::new(span, "malformed doc comment"))
                 }
             });
 
         // the name of the struct/variant/field is used as kebab case by default
         let default_name = || ident.to_string().to_case(Case::Kebab);
 
-        let Some(line) = lines.next() else {
+        let Some(line_span) = lines.next() else {
             return Ok(Self {
                 name: Localized {
                     default: default_name(),
@@ -175,14 +176,19 @@ impl NameDescription {
             });
         };
 
-        let (line, mut span) = line?;
+        let (line, span) = line_span?;
 
         let (name, line) = extract_inline_code(&line, span)?;
         let (name, sub_name) = if let Some(name) = name {
-            let (name, sub_name) = parse_command_name(name);
-            if let Some(sub_name) = sub_name {
-                check_name(sub_name, span)?;
-            }
+            let (name, sub_name) = if allow_sub_name {
+                let (name, sub_name) = parse_command_name(name);
+                if let Some(sub_name) = sub_name {
+                    check_name(sub_name, span)?;
+                }
+                (name, sub_name)
+            } else {
+                (name, None)
+            };
             check_name(name, span)?;
             (name.to_string(), sub_name)
         } else {
@@ -190,20 +196,21 @@ impl NameDescription {
         };
 
         let mut description = line.to_string();
-        for line in &mut lines {
-            let (line, next_span) = line?;
+        for line_span in &mut lines {
+            let (line, _) = line_span?;
             if line.is_empty() {
                 break;
             }
-            description.push(' ');
+            if !description.is_empty() {
+                description.push(' ');
+            }
             description += &line;
-            span = span.join(next_span).expect("should be in the same file");
         }
 
-        check_description(&description, span);
+        check_description(&description, span)?;
 
         // TODO: localizations
-        for line in &mut lines {}
+        for line_span in &mut lines {}
 
         Ok(Self {
             name: Localized {
@@ -270,24 +277,33 @@ fn check_name(name: &str, span: Span) -> syn::Result<()> {
 
     let invalid_chars = name
         .chars()
-        .filter(|&c| {
-            c != '-'
-                && c != '_'
-                && c != '\''
-                && !c.is_alphanumeric()
-                && !matches!(c.script(), Script::Devanagari | Script::Thai)
-        })
-        .collect::<Vec<_>>();
+        .filter(|c| !is_valid_command_char(*c))
+        .sorted()
+        .dedup()
+        .collect::<String>();
 
     if !invalid_chars.is_empty() {
-        const REGEX: &str = r"[-_'\p{L}\p{N}\p{sc=Deva}\p{sc=Thai}]";
         return Err(syn::Error::new(
             span,
-            format!("{invalid_chars:?} are not a valid for command names; they must match {REGEX}"),
+            format!("characters {invalid_chars:?} cannot be used in command names"),
         ));
     }
 
     Ok(())
+}
+
+fn is_valid_command_char(c: char) -> bool {
+    match c {
+        '-' | '_' | '\'' => true,
+        _ if !lowercase_is_same(c) => false,
+        _ if c.is_alphanumeric() => true,
+        _ if matches!(c.script(), Script::Devanagari | Script::Thai) => true,
+        _ => false,
+    }
+}
+
+fn lowercase_is_same(c: char) -> bool {
+    c.to_lowercase().exactly_one().is_ok_and(|lower| lower == c)
 }
 
 fn check_description(description: &str, span: Span) -> syn::Result<()> {
