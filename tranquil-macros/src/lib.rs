@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, btree_map::Entry};
 
 use convert_case::{Case, Casing};
 use darling::{
@@ -16,9 +16,9 @@ use unicode_script::{Script, UnicodeScript};
 
 #[proc_macro_derive(Command, attributes(tranquil))]
 pub fn derive_command(input: TokenStream) -> TokenStream {
-    CommandMeta::from_derive_input(&parse_macro_input!(input as DeriveInput)).map_or_else(
+    Command::from_derive_input(&parse_macro_input!(input as DeriveInput)).map_or_else(
         |error| error.write_errors().into(),
-        CommandMeta::into_impl_command,
+        |command_meta| command_meta.into_impl_command().flatten_error().into(),
     )
 }
 
@@ -26,11 +26,11 @@ pub fn derive_command(input: TokenStream) -> TokenStream {
 #[darling(
     attributes(tranquil),
     forward_attrs(doc),
-    supports(struct_unit, struct_named, enum_unit, enum_named)
+    supports(struct_unit, struct_named, enum_unit, enum_named, enum_newtype)
 )]
-struct CommandMeta {
+struct Command {
     ident: Ident,
-    data: Data<SubCommand, CommandOption>,
+    data: Data<CommandVariant, CommandOption>,
     attrs: Vec<Attribute>,
 
     // TODO: kind
@@ -41,78 +41,163 @@ struct CommandMeta {
     // TODO: handler
 }
 
-impl CommandMeta {
-    fn into_impl_command(self) -> TokenStream {
+impl Command {
+    fn into_impl_command(self) -> syn::Result<proc_macro2::TokenStream> {
         let type_name = &self.ident;
 
-        let name_description = match NameDescription::parse(&self.attrs, type_name, false) {
-            Ok(name_description) => name_description,
-            Err(error) => return error.into_compile_error().into(),
-        };
-
-        let name = name_description.name.default;
-        let description = name_description.description.default;
+        let NameDescriptionBuilt {
+            name,
+            description,
+            localizations,
+        } = NameDescription::parse(&self.attrs, type_name, None)?.build();
 
         let nsfw = self.nsfw.then(|| quote! { .nsfw(true) }).into_iter();
 
-        // let options: &mut dyn Iterator<Item = _> = match self.data {
-        //     Data::Enum(subcommands) => &mut subcommands
-        //         .into_iter()
-        //         .map(|subcommand| subcommand.create()),
-        //     Data::Struct(command_options) => &mut command_options
-        //         .fields
-        //         .into_iter()
-        //         .map(|command_option| command_option.create()),
-        // };
+        let (options, resolve_command, autocomplete, resolve_autocomplete) = match &self.data {
+            Data::Enum(command_variants) => {
+                let mut options = Vec::<proc_macro2::TokenStream>::new(); // TODO: remove type hint
+                let mut group = None;
+                for command_variant in command_variants {
+                    command_variant.validate()?;
+
+                    if command_variant.is_group() {
+                        group = Some(command_variant.ident.to_string());
+                        continue;
+                    }
+
+                    let implicit_end_group = group
+                        .as_ref()
+                        .is_some_and(|group| !command_variant.is_in_group(group));
+                    if let Some(end_group) = &command_variant.end_group {
+                        if implicit_end_group {
+                            return Err(syn::Error::new_spanned(end_group, "invalid end_group"));
+                        }
+                        group = None;
+                    } else if implicit_end_group {
+                        group = None;
+                    }
+
+                    // command_variant.
+                }
+
+                (quote! { #( #options ),* }, quote! {}, quote! {}, quote! {})
+            }
+            Data::Struct(command_options) => (
+                CommandOption::create_list(command_options),
+                quote! {},
+                quote! {},
+                quote! {},
+            ),
+        };
 
         let result = quote! { ::tranquil::interaction::error::Result };
-        let serenity = quote! { ::tranquil::serenity::all };
-        quote! {
+        let serenity = serenity();
+        Ok(quote! {
             impl ::tranquil::interaction::command::Command for #type_name {
                 const NAME: &str = #name;
 
-                type Autocomplete = ::tranquil::interaction::command::NoAutocomplete; // TODO
+                type Autocomplete = #autocomplete;
 
                 fn create() -> #serenity::CreateCommand {
                     #serenity::CreateCommand::new(#name)
-                        // #( #name_localized )*
+                        .description(#description)
+                        #localizations
                         // TODO: .kind(#kind)
                         // TODO: .default_member_permissions(#permissions)
-                        .description(#description)
-                        // #( #description_localized )*
-                        // .set_options(::std::vec![ #( #options ),* ])
+                        .set_options(::std::vec![#options])
                         // TODO: .integration_types(#integration_types)
                         // TODO: .contexts(#contexts)
                         #( #nsfw )*
                         // TODO: .handler(#handler)
                 }
 
+                fn resolve_command(data: &mut CommandInteraction) -> #result<Self> {
+                    #resolve_command
+                }
+
                 fn resolve_autocomplete(
                     data: &mut #serenity::CommandInteraction,
                 ) -> #result<Self::Autocomplete> {
-                    todo!()
-                }
-
-                fn resolve_command(data: &mut CommandInteraction) -> #result<Self> {
-                    todo!()
+                    #resolve_autocomplete
                 }
             }
-        }
-        .into()
+        })
     }
 }
 
 #[derive(FromVariant)]
 #[darling(attributes(tranquil), forward_attrs(doc))]
-struct SubCommand {
+struct CommandVariant {
     ident: Ident,
     fields: Fields<CommandOption>,
     attrs: Vec<Attribute>,
+
+    end_group: Option<Ident>,
+}
+
+impl CommandVariant {
+    fn validate(&self) -> syn::Result<()> {
+        if self.is_group() {
+            if self.fields.len() > 1 {
+                return Err(syn::Error::new_spanned(
+                    &self.ident,
+                    "invalid command group",
+                ));
+            }
+            if let Some(end_group) = &self.end_group {
+                return Err(syn::Error::new_spanned(end_group, "invalid end_group"));
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether this [`CommandVariant`] is a command group marker.
+    fn is_group(&self) -> bool {
+        self.fields
+            .iter()
+            .next()
+            .is_some_and(|command_option| command_option.ident.is_none())
+    }
+
+    /// Whether this [`CommandVariant`] is in the given `group`.
+    ///
+    /// Returns `true` if the command is the group itself, which would require two variants with the
+    /// same name.
+    fn is_in_group(&self, group: &str) -> bool {
+        self.ident.to_string().starts_with(group)
+    }
+
+    // fn create(&self, group: Option<&Ident>) -> syn::Result<proc_macro2::TokenStream> {
+    //     let NameDescriptionBuilt {
+    //         name,
+    //         description,
+    //         localizations,
+    //     } = NameDescription::parse(&self.attrs, &self.ident, group)?.build();
+
+    //     // let options = todo!();
+
+    //     if self.is_group() {}
+
+    //     let serenity = serenity();
+    //     Ok(quote! {
+    //         #serenity::CreateCommandOption::new(
+    //             #serenity::CommandOptionType::SubCommand,
+    //             #name,
+    //             #description,
+    //         )
+    //             #localizations
+    //             // .set_sub_options(::std::vec![ #( #options ),* ])
+    //     })
+    // }
 }
 
 #[derive(FromField)]
 #[darling(attributes(tranquil), forward_attrs(doc))]
 struct CommandOption {
+    /// The name of the option.
+    ///
+    /// [`None`] indicates that the variant is a tuple, which indicates that this variant is a
+    /// command group.
     ident: Option<Ident>,
     ty: Type,
     attrs: Vec<Attribute>,
@@ -121,15 +206,56 @@ struct CommandOption {
     autocomplete: bool,
 }
 
+impl CommandOption {
+    fn create(&self) -> syn::Result<proc_macro2::TokenStream> {
+        let ty = &self.ty;
+
+        let NameDescriptionBuilt {
+            name,
+            description,
+            localizations,
+        } = NameDescription::parse(
+            &self.attrs,
+            self.ident.as_ref().expect("should not be called on groups"),
+            None,
+        )?
+        .build();
+
+        let autocomplete = self
+            .autocomplete
+            .then(|| quote! { .autocomplete(true) })
+            .into_iter();
+
+        Ok(quote! {
+            <#ty as ::tranquil::interaction::command::option::CommandOption>::create(
+                #name.into(),
+                #description.into(),
+            )
+                #localizations
+                #( #autocomplete )*
+        })
+    }
+
+    fn create_list(command_options: &Fields<CommandOption>) -> proc_macro2::TokenStream {
+        let options = command_options
+            .fields
+            .iter()
+            .map(|command_option| command_option.create().flatten_error());
+        quote! { #( #options ),* }
+    }
+}
+
 #[derive(Default)]
 struct NameDescription {
     name: Localized,
-    sub_name: Option<Localized>,
     description: Localized,
 }
 
 impl NameDescription {
-    /// Parses [`NameDescription`] for doc comments in `attrs` using `ident` as a fallback name.
+    /// Parses [`NameDescription`] for doc comments in `attrs`.
+    ///
+    /// If no command name is specified, `ident` converted to kebab-case is used as a default. If
+    /// `group` is provided, it will be stripped from the `ident`.
     ///
     /// The following syntax is parsed:
     ///
@@ -141,7 +267,7 @@ impl NameDescription {
     /// ///   welche ebenfalls mehrere Zeilen haben kann
     /// /// - `fr` Command name translation is optional
     /// ```
-    fn parse(attrs: &[Attribute], ident: &Ident, allow_sub_name: bool) -> syn::Result<Self> {
+    fn parse(attrs: &[Attribute], ident: &Ident, group: Option<&str>) -> syn::Result<Self> {
         let mut lines = attrs
             .iter()
             // doc attributes are technically already filtered out by darling
@@ -159,8 +285,16 @@ impl NameDescription {
                 }
             });
 
-        // the name of the struct/variant/field is used as kebab case by default
-        let default_name = || ident.to_string().to_case(Case::Kebab);
+        let default_name = || {
+            let name = ident.to_string();
+            if let Some(group) = group {
+                name.strip_prefix(group)
+                    .expect("command should have a group prefix")
+            } else {
+                &name
+            }
+            .to_case(Case::Kebab)
+        };
 
         let Some(line_span) = lines.next() else {
             return Ok(Self {
@@ -168,7 +302,6 @@ impl NameDescription {
                     default: default_name(),
                     ..Default::default()
                 },
-                sub_name: None,
                 description: Localized {
                     default: "n/a".to_string(),
                     ..Default::default()
@@ -179,21 +312,13 @@ impl NameDescription {
         let (line, span) = line_span?;
 
         let (name, line) = extract_inline_code(&line, span)?;
-        let (name, sub_name) = if let Some(name) = name {
-            let (name, sub_name) = if allow_sub_name {
-                let (name, sub_name) = parse_command_name(name);
-                if let Some(sub_name) = sub_name {
-                    check_name(sub_name, span)?;
-                }
-                (name, sub_name)
-            } else {
-                (name, None)
-            };
-            check_name(name, span)?;
-            (name.to_string(), sub_name)
+        let name = if let Some(name) = name {
+            name.to_string()
         } else {
-            (default_name(), None)
+            default_name()
         };
+
+        check_name(&name, span)?;
 
         let mut description = line.to_string();
         for line_span in &mut lines {
@@ -209,24 +334,97 @@ impl NameDescription {
 
         check_description(&description, span)?;
 
-        // TODO: localizations
-        for line_span in &mut lines {}
+        let mut name_localizations = BTreeMap::new();
+        let mut description_localizations = BTreeMap::new();
+        let mut last_locale = None;
+        for line_span in &mut lines {
+            let (line, span) = line_span?;
+            let (has_dash, line) = strip_dash(&line);
+            if has_dash {
+                let (locale, line) = extract_inline_code(line, span)?;
+                let locale = parse_locale(
+                    locale.ok_or(syn::Error::new(span, "locale expected"))?,
+                    span,
+                )?;
+
+                let (name, line) = extract_inline_code(line, span)?;
+                match description_localizations.entry(locale) {
+                    Entry::Vacant(entry) => entry.insert((line.to_string(), span)),
+                    Entry::Occupied(_) => {
+                        return Err(syn::Error::new(span, format!("duplicate locale: {locale}")));
+                    }
+                };
+
+                if let Some(name) = name {
+                    match name_localizations.entry(locale) {
+                        Entry::Vacant(entry) => entry.insert(name.to_string()),
+                        Entry::Occupied(_) => {
+                            unreachable!("description should have returned already")
+                        }
+                    };
+                }
+
+                last_locale = Some(locale);
+            } else {
+                let (description, _) = description_localizations
+                    .get_mut(last_locale.ok_or(syn::Error::new(
+                        span,
+                        "dash expected to start a new localization entry",
+                    ))?)
+                    .expect("localized description should exist");
+                if !description.is_empty() {
+                    description.push(' ');
+                }
+                *description += line;
+            }
+        }
+
+        for (description, span) in description_localizations.values() {
+            check_description(description, *span)?;
+        }
 
         Ok(Self {
             name: Localized {
                 default: name,
-                ..Default::default()
+                localizations: name_localizations,
             },
-            sub_name: sub_name.map(|sub_name| Localized {
-                default: sub_name.to_string(),
-                ..Default::default()
-            }),
             description: Localized {
                 default: description,
-                ..Default::default()
+                localizations: description_localizations
+                    .into_iter()
+                    .map(|(locale, (description, _))| (locale, description))
+                    .collect(),
             },
         })
     }
+
+    fn build(self) -> NameDescriptionBuilt {
+        let name_localized = self
+            .name
+            .localizations
+            .iter()
+            .map(|(locale, name)| quote! { .name_localized(#locale, #name) });
+
+        let description_localized =
+            self.description.localizations.iter().map(
+                |(locale, description)| quote! { .description_localized(#locale, #description) },
+            );
+
+        NameDescriptionBuilt {
+            name: self.name.default,
+            description: self.description.default,
+            localizations: quote! {
+                #( #name_localized )*
+                #( #description_localized )*
+            },
+        }
+    }
+}
+
+struct NameDescriptionBuilt {
+    name: String,
+    description: String,
+    localizations: proc_macro2::TokenStream,
 }
 
 /// Strips the `-` from `- foo` and returns `true` if a `-` was stripped.
@@ -255,14 +453,6 @@ fn extract_inline_code(line: &str, span: Span) -> syn::Result<(Option<&str>, &st
         }
     } else {
         Ok((None, line))
-    }
-}
-
-fn parse_command_name(full_name: &str) -> (&str, Option<&str>) {
-    if let Some((name, sub_name)) = full_name.split_once(' ') {
-        (name, Some(sub_name))
-    } else {
-        (full_name, None)
     }
 }
 
@@ -311,7 +501,7 @@ fn check_description(description: &str, span: Span) -> syn::Result<()> {
 }
 
 fn check_string(max_len: usize, what: &str, string: &str, span: Span) -> syn::Result<()> {
-    let len = string.len();
+    let len = string.chars().count(); // characters, not bytes
     if len == 0 {
         Err(syn::Error::new(span, format!("{what} cannot be empty")))
     } else if len > max_len {
@@ -325,40 +515,61 @@ fn check_string(max_len: usize, what: &str, string: &str, span: Span) -> syn::Re
 }
 
 /// Parses a `locale` from a `&str` into a `&'static str`.
+///
+/// See https://discord.com/developers/docs/reference#locales
 fn parse_locale(locale: &str, span: Span) -> syn::Result<&'static str> {
     match locale {
-        "id" => Ok("id"),
-        "da" => Ok("da"),
-        "de" => Ok("de"),
-        "en-GB" => Ok("en-GB"),
-        "en-US" => Ok("en-US"),
-        "es-ES" => Ok("es-ES"),
-        "es-419" => Ok("es-419"),
-        "fr" => Ok("fr"),
-        "hr" => Ok("hr"),
-        "it" => Ok("it"),
-        "lt" => Ok("lt"),
-        "hu" => Ok("hu"),
-        "nl" => Ok("nl"),
-        "no" => Ok("no"),
-        "pl" => Ok("pl"),
-        "pt-BR" => Ok("pt-BR"),
-        "ro" => Ok("ro"),
-        "fi" => Ok("fi"),
-        "sv-SE" => Ok("sv-SE"),
-        "vi" => Ok("vi"),
-        "tr" => Ok("tr"),
-        "cs" => Ok("cs"),
-        "el" => Ok("el"),
-        "bg" => Ok("bg"),
-        "ru" => Ok("ru"),
-        "uk" => Ok("uk"),
-        "hi" => Ok("hi"),
-        "th" => Ok("th"),
-        "zh-CN" => Ok("zh-CN"),
-        "ja" => Ok("ja"),
-        "zh-TW" => Ok("zh-TW"),
-        "ko" => Ok("ko"),
-        _ => Err(syn::Error::new(span, format!("invalid locale: {locale}"))),
+        "id" => Ok("id"),         // Indonesian
+        "da" => Ok("da"),         // Danish
+        "de" => Ok("de"),         // German
+        "en-GB" => Ok("en-GB"),   // English, UK
+        "en-US" => Ok("en-US"),   // English, US
+        "es-ES" => Ok("es-ES"),   // Spanish
+        "es-419" => Ok("es-419"), // Spanish, LATAM
+        "fr" => Ok("fr"),         // French
+        "hr" => Ok("hr"),         // Croatian
+        "it" => Ok("it"),         // Italian
+        "lt" => Ok("lt"),         // Lithuanian
+        "hu" => Ok("hu"),         // Hungarian
+        "nl" => Ok("nl"),         // Dutch
+        "no" => Ok("no"),         // Norwegian
+        "pl" => Ok("pl"),         // Polish
+        "pt-BR" => Ok("pt-BR"),   // Portuguese, Brazilian
+        "ro" => Ok("ro"),         // Romanian, Romania
+        "fi" => Ok("fi"),         // Finnish
+        "sv-SE" => Ok("sv-SE"),   // Swedish
+        "vi" => Ok("vi"),         // Vietnamese
+        "tr" => Ok("tr"),         // Turkish
+        "cs" => Ok("cs"),         // Czech
+        "el" => Ok("el"),         // Greek
+        "bg" => Ok("bg"),         // Bulgarian
+        "ru" => Ok("ru"),         // Russian
+        "uk" => Ok("uk"),         // Ukrainian
+        "hi" => Ok("hi"),         // Hindi
+        "th" => Ok("th"),         // Thai
+        "zh-CN" => Ok("zh-CN"),   // Chinese, China
+        "ja" => Ok("ja"),         // Japanese
+        "zh-TW" => Ok("zh-TW"),   // Chinese, Taiwan
+        "ko" => Ok("ko"),         // Korean
+        _ => Err(syn::Error::new(
+            span,
+            format!(
+                "invalid locale: {locale}; see https://discord.com/developers/docs/reference#locales"
+            ),
+        )),
+    }
+}
+
+fn serenity() -> proc_macro2::TokenStream {
+    quote! { ::tranquil::serenity::all }
+}
+
+trait FlattenErrorExt {
+    fn flatten_error(self) -> proc_macro2::TokenStream;
+}
+
+impl FlattenErrorExt for syn::Result<proc_macro2::TokenStream> {
+    fn flatten_error(self) -> proc_macro2::TokenStream {
+        self.unwrap_or_else(|error| error.to_compile_error())
     }
 }

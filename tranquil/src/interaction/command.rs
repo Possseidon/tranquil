@@ -20,10 +20,52 @@ pub trait Command: Run + Sized {
     /// Returns a builder for this command which can be sent to Discord.
     fn create() -> CreateCommand;
 
-    fn resolve_autocomplete(data: &mut CommandInteraction) -> Result<Self::Autocomplete>;
-
     fn resolve_command(data: &mut CommandInteraction) -> Result<Self>;
+
+    fn resolve_autocomplete(data: &mut CommandInteraction) -> Result<Self::Autocomplete>;
 }
+
+/// Marks a command group inside a [`Command`].
+///
+/// The [`Group`] itself is not actually callable as a command. For that reason [`Group`] is a
+/// **never type** that cannot be instantiated. These [`Group`] variants act solely as markers to
+/// provide a description (and localizations) for the group itself.
+///
+/// Commands following the [`Group`] will be part of that group. The group concludes automatically
+/// once a command does not have the name of the [`Group`] variant as a prefix. This is usually
+/// sufficient, but a group can also be concluded manually via the `#[tranquil(end_group)]`
+/// attribute as shown in the example below.
+///
+/// ```
+/// # use tranquil::interaction::command::{Command, Group};
+/// /// Pings users.
+/// #[derive(Command)]
+/// enum Ping {
+///     /// Pings all users on the server.
+///     All,
+///
+///     /// Pings a user.
+///     User(Group),
+///     /// Pings a specific user.
+///     UserByName { user: UserId },
+///     /// Pings a random user on the server.
+///     UserRandom,
+///
+///     /// A separate `user-foo` command rather than a `foo` command in the `user` group.
+///     #[tranquil(end_group)]
+///     UserFoo,
+/// }
+///
+/// # let ping = Ping::All;
+/// match ping {
+///     Ping::All => {}
+///     // omitting Ping::User is still an exhaustive match due to Group being a never type
+///     Ping::UserByName { .. } => {}
+///     Ping::UserRandom => {}
+///     Ping::UserFoo => {}
+/// }
+/// ```
+pub enum Group {}
 
 pub trait Run {
     fn run(

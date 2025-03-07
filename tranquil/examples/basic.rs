@@ -7,68 +7,34 @@ use tokio::{select, signal};
 use tranquil::{
     Tranquil,
     interaction::{
-        command::{Command, Run},
+        command::{Command, Group, Run},
         error::Result,
     },
 };
 
-// #[derive(Command)]
-// #[tranquil(
-//     name("my-ping-command", de = "mein-ping-kommando"),
-//     description(
-//         "Check if the Bot is still alive",
-//         de = "Schaue ob der Bot noch lebt",
-//         en_US = "Check if the Bot is still alive",
-//     )
-// )]
-// enum Ping {
-//     Bot,
-//     User {
-//         #[tranquil(description("The user to ping"))]
-//         user: String,
-//     },
-// }
-
-// #[derive(Command)]
-// #[tranquil(description("le permission control"))]
-// enum PermissionControl {
-//     #[tranquil(
-//         name(de = "neu-hinzufügen"),
-//         description(
-//             "Add a new permission to a user",
-//             de = "Einem Benutzer eine neue Berechtigung hinzufügen",
-//             en_US = "Interesting",
-//         )
-//     )]
-//     AddNew {
-//         #[tranquil(description("crazy user"))]
-//         user: UserId,
-//         #[tranquil(description("crazy permission"))]
-//         permission: String,
-//     },
-//     #[tranquil(description("remove an old permission"))]
-//     RemoveOld,
-// }
-
-/// `füge-mitglieder-hinzu-oder`
-/// bli blub
-///
-/// - `en_GB` `colour` Add a member to a colour and yeah this is actually a really long description
-///   that I am going to write. I want it to be even longer just so that I can get some more
-///   wrapping
-/// - `de` `mitglied` Füge Mitglieder hinzu oder entferne sie
-/// - `fr` `francais` Je ne parle pas français
-/// - `jp` `色` ユーザーの色
 #[derive(Command)]
 enum ColorCrazy {
+    /// description
+    Get(Group),
+    GetUser(ColorGet),
     /// `get awesome-user` Get the color of a user
-    GetAwesomeUser { user: UserId },
+    GetAwesomeUser {
+        user: UserId,
+    },
     /// `get-awesome user` Get the color of a user
-    GetAwesomeUser2 { user: UserId },
+    GetAwesomeUser2 {
+        user: UserId,
+    },
     /// Set the color of a user
-    Set { user: UserId, color: String },
+    Set {
+        user: UserId,
+        #[tranquil(autocomplete)]
+        color: String,
+    },
     /// Clear the color of a user
-    Clear { user: UserId },
+    Clear {
+        user: UserId,
+    },
 }
 
 impl Run for ColorCrazy {
