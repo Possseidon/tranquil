@@ -1,22 +1,23 @@
 [package]
 name = "tranquil-macros"
-version = "0.3.0"
-authors = ["Possseidon <xpossseidon@gmail.com>"]
-edition = "2024"
 description = "Macro crate for tranquil."
-repository = "https://github.com/Possseidon/tranquil"
-license = "MIT"
 keywords = ["commands", "macro", "tranquil"]
 categories = []
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
 
 [lib]
 proc-macro = true
 
 [dependencies]
-convert_case = "0.8.0"
-darling = "0.20.10"
-itertools = "0.14.0"
-proc-macro2 = "1.0.94"
-quote = "1.0.39"
-syn = "2.0.99"
-unicode-script = "0.5.7"
+convert_case.workspace = true
+darling.workspace = true
+itertools.workspace = true
+proc-macro2.workspace = true
+quote.workspace = true
+syn.workspace = true
+unicode-script.workspace = true
