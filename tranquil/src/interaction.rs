@@ -1,8 +1,8 @@
 use uuid::{NonNilUuid, Uuid};
 
 pub mod command;
+pub mod component;
 pub mod error;
-// pub mod component;
 // pub mod modal;
 
 struct CustomId(NonNilUuid);

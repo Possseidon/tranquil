@@ -1,12 +1,15 @@
-pub mod option;
+// pub mod option;
 
-use serenity::all::{CommandInteraction, Context, CreateAutocompleteResponse, CreateCommand};
 use thiserror::Error;
 pub use tranquil_macros::Command;
 
 use super::error::Result;
+use crate::{CommandInteraction, Context, CreateAutocompleteResponse, CreateCommand};
 
-pub trait Command: Run + Sized {
+/// Contains the structure of a Discord slash command.
+///
+/// Can (and usually should) be derived.
+pub trait Command: Sized + Send {
     /// Should be the same as [`CreateCommand::name`].
     ///
     /// Used to match against commands returned from the endpoint upon creation.
@@ -14,15 +17,25 @@ pub trait Command: Run + Sized {
 
     /// A separate type containing all commands that have autocomplete options.
     ///
-    /// [`NoAutocomplete`] if none of the commands have any autocompleted option.
-    type Autocomplete: Autocomplete;
+    /// An uninhabited enum can be used when there are no autocompleted options.
+    type Autocomplete: Send;
 
     /// Returns a builder for this command which can be sent to Discord.
     fn create() -> CreateCommand;
 
-    fn resolve_command(data: &mut CommandInteraction) -> Result<Self>;
+    /// Parses the given [`CommandInteraction`].
+    ///
+    /// This function is encouraged to move revelant pieces out of `interaction` to avoid cloning.
+    ///
+    /// The initial command name may be ignored and assumed to already match [`Command::NAME`].
+    fn resolve(interaction: &mut CommandInteraction) -> Result<Self>;
 
-    fn resolve_autocomplete(data: &mut CommandInteraction) -> Result<Self::Autocomplete>;
+    /// Parses the given [`CommandInteraction`] for an autocomplete interaction.
+    ///
+    /// This function is encouraged to move revelant pieces out of `interaction` to avoid cloning.
+    ///
+    /// The initial command name may be ignored and assumed to already match [`Command::NAME`].
+    fn resolve_autocomplete(interaction: &mut CommandInteraction) -> Result<Self::Autocomplete>;
 }
 
 /// Marks a command group inside a [`Command`].
@@ -67,31 +80,34 @@ pub trait Command: Run + Sized {
 /// ```
 pub enum Group {}
 
-pub trait Run {
+pub trait Run<C> {
     fn run(
-        self,
-        ctx: Context,
+        &self,
+        command: C,
+        ctx: &Context,
         interaction: CommandInteraction,
     ) -> impl Future<Output = Result<()>> + Send;
 }
 
-pub trait Autocomplete {
+pub trait Autocomplete<C> {
     fn autocomplete(
-        self,
-        ctx: Context,
+        &self,
+        command: C,
+        ctx: &Context,
         interaction: CommandInteraction,
     ) -> impl Future<Output = Result<CreateAutocompleteResponse>> + Send;
 }
 
 pub enum NoAutocomplete {}
 
-impl Autocomplete for NoAutocomplete {
+impl<T: Sync> Autocomplete<NoAutocomplete> for T {
     async fn autocomplete(
-        self,
-        _ctx: Context,
+        &self,
+        command: NoAutocomplete,
+        _ctx: &Context,
         _interaction: CommandInteraction,
     ) -> Result<CreateAutocompleteResponse> {
-        match self {}
+        match command {}
     }
 }
 

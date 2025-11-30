@@ -1,4 +1,3 @@
-use serenity::all::{CommandOptionType, CreateInteractionResponseMessage, GenericId};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -44,3 +43,10 @@ pub enum DiscordError {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+// TODO: was from serenity
+#[derive(Debug)]
+struct CreateInteractionResponseMessage;
+
+#[derive(Debug)]
+struct CommandOptionType;

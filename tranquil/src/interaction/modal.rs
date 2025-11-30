@@ -1,20 +1,29 @@
-use serenity::all::{Context, ModalInteraction};
+use serenity::all::{Context, CreateActionRow, CreateModal, ModalInteraction};
 
 use super::CustomIdAssignment;
 
-pub trait Modal: Submit {
-    /// It rarely makes sense to use a fixed `custom_id` for something as short-lived as a modal.
-    fn custom_id() -> CustomIdAssignment {
-        CustomIdAssignment::OnStart
+pub trait ModalBuilder<M: Modal> {
+    fn build(self) -> CreateModal {
+        CreateModal::new(custom_id, title).components(components)
     }
+}
+
+pub trait Modal {
+    const CUSTOM_ID: CustomIdAssignment = CustomIdAssignment::OnStart;
 
     fn resolve(interaction: &mut ModalInteraction) -> Self;
 }
 
-pub trait Submit {
+pub trait Submit<M: Modal> {
     fn submit(
-        self,
+        &self,
+        modal: M,
         ctx: Context,
         interaction: ModalInteraction,
     ) -> impl Future<Output = Result<()>> + Send;
+}
+
+struct CreateModal2 {
+    title: String,
+    rows: Vec<CreateActionRow>,
 }

@@ -9,9 +9,7 @@ pub mod role;
 pub mod string;
 pub mod user;
 
-use serenity::all::{
-    CommandDataOptionValue, CommandDataResolved, CommandOptionType, CreateCommandOption,
-};
+use serenity::all::{CommandDataOptionValue, CommandOptionType, CreateCommandOption};
 
 use crate::interaction::error::{DiscordError, Result};
 

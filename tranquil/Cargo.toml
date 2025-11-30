@@ -11,15 +11,20 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+ahash.workspace = true
 anyhow.workspace = true
-bounded-integer.workspace = true
-serenity.workspace = true
+deranged.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
+time.workspace = true
+tokio.workspace = true
+tokio-tungstenite = { version = "0.28.0", default-features = false }
 tracing.workspace = true
 tranquil-macros.workspace = true
 uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 dotenvy.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "signal"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "signal", "macros"] }
 tracing-subscriber.workspace = true

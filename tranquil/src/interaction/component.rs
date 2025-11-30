@@ -1,5 +1,4 @@
 use anyhow::Result;
-use serenity::all::{ComponentInteraction, Context};
 
 use super::CustomIdAssignment;
 
@@ -18,3 +17,6 @@ pub trait Interact {
         interaction: ComponentInteraction,
     ) -> impl Future<Output = Result<()>> + Send;
 }
+
+struct ComponentInteraction;
+struct Context;

@@ -1,122 +1,199 @@
+pub(crate) mod display;
+mod gateway;
+mod http;
+pub mod id;
 pub mod interaction;
 pub mod locale;
+pub mod markdown;
+pub mod model;
+pub mod snowflake;
 
-// Re-exported for tranquil-macros
-pub use serenity;
-use serenity::{
-    all::{
-        CommandInteraction, ComponentInteraction, Context, Framework, FullEvent, Interaction,
-        ModalInteraction, Ready,
-    },
-    async_trait,
-};
+use std::{collections::HashMap, pin::Pin, sync::Mutex};
+
 use thiserror::Error;
 use tracing::error;
 
-pub struct Tranquil {
-    // TODO
+use crate::interaction::{
+    command::{Autocomplete, Command, Run},
+    error::Error,
+};
+
+#[derive(Default)]
+pub struct Tranquil<B> {
+    bot: B,
+    create_commands: Mutex<Vec<CreateCommand>>,
+    command_handlers: HashMap<&'static str, CommandHandler<B>>,
+    // component_handlers: HashMap<&'static str, ComponentHandler<B>>,
+    // modal_handlers: HashMap<&'static str, ModalHandler<B>>,
 }
 
-#[async_trait]
-impl Framework for Tranquil {
-    async fn dispatch(&self, ctx: Context, event: FullEvent) {
-        match event {
-            FullEvent::Ready { data_about_bot } => self.ready(ctx, data_about_bot).await,
-            FullEvent::InteractionCreate { interaction } => {
-                self.interaction(ctx, interaction).await
-            }
-            _ => {}
-        }
-    }
-}
+// #[async_trait]
+// impl<B: Send + Sync> Framework for Tranquil<B> {
+//     async fn init(&mut self, _client: &serenity::Client) {}
 
-impl Tranquil {
-    pub fn new() -> Self {
-        Self {}
-    }
+//     async fn dispatch(&self, ctx: Context, event: FullEvent) {
+//         match event {
+//             FullEvent::Ready { data_about_bot } => self.ready(ctx, data_about_bot).await,
+//             FullEvent::InteractionCreate { interaction } => {
+//                 self.interaction(ctx, interaction).await
+//             }
+//             _ => {}
+//         }
+//     }
+// }
 
-    async fn ready(&self, ctx: Context, data_about_bot: Ready) {
-        // self.synced_commands.get_or_init(async || {
-        //     let commands = Command::set_global_commands(&ctx, take(&mut self.create_commands))
-        //         .await
-        //         .unwrap(); // TODO: turn into Err
-        //     assert_eq!(commands.len(), self.command_fns.len()); // TODO: turn into Err
-        //     commands
-        //         .into_iter()
-        //         .zip(take(&mut self.command_fns))
-        //         .map(|(command, fns)| {
-        //             assert!(command.name == fns.name);
-        //             (command.id, fns)
-        //         })
-        //         .collect()
-        // });
-
-        // register commands globally, manually for all connected or for specific guilds
-
-        // Command::set_global_commands(&ctx, commands);
-
-        // for guild in data_about_bot.guilds {
-        //     guild
-        //         .id
-        //         .set_commands(&ctx)
-        //         .await
-        //         .inspect_err(|error| {
-        //             eprintln!("Failed updating commands {error}");
-        //         })
-        //         .ok();
-        // }
-    }
-
-    async fn interaction(&self, ctx: Context, interaction: Interaction) {
-        let result = match interaction {
-            Interaction::Command(interaction) => self
-                .command_interaction(ctx, interaction, false)
-                .await
-                .map_err(InteractionError::Command),
-            Interaction::Autocomplete(interaction) => self
-                .command_interaction(ctx, interaction, true)
-                .await
-                .map_err(InteractionError::Command),
-            Interaction::Component(interaction) => self
-                .component_interaction(ctx, interaction)
-                .await
-                .map_err(InteractionError::Component),
-            Interaction::Modal(interaction) => self
-                .modal_interaction(ctx, interaction)
-                .await
-                .map_err(InteractionError::Modal),
-            _ => Ok(()),
-        };
-
-        if let Err(error) = result {
-            error!("Error while handling interaction: {error:#?}");
+impl<T> Tranquil<T> {
+    pub fn new(bot: T) -> Self {
+        Self {
+            bot,
+            create_commands: Default::default(),
+            command_handlers: Default::default(),
         }
     }
 
-    async fn command_interaction(
-        &self,
-        ctx: Context,
-        interaction: CommandInteraction,
-        autocomplete: bool,
-    ) -> Result<(), CommandInteractionError> {
-        Err(CommandInteractionError::FooBar)
+    /// Registers a [`Command`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if a command with this name was already registered.
+    pub fn command<C: Command>(mut self) -> Self
+    where
+        T: Sync + Run<C> + Autocomplete<C::Autocomplete>,
+    {
+        let new = self
+            .command_handlers
+            .insert(
+                C::NAME,
+                CommandHandler {
+                    interact: |bot, ctx, mut interaction| {
+                        Box::pin(async move {
+                            bot.run(C::resolve(&mut interaction)?, ctx, interaction)
+                                .await
+                        })
+                    },
+                    autocomplete: |bot, ctx, mut interaction| {
+                        Box::pin(async move {
+                            bot.autocomplete(
+                                C::resolve_autocomplete(&mut interaction)?,
+                                ctx,
+                                interaction,
+                            )
+                            .await
+                        })
+                    },
+                },
+            )
+            .is_none();
+
+        assert!(new, "command {:?} already exists", C::NAME);
+
+        // self.create_commands.get_mut().unwrap().push(C::create());
+
+        self
     }
 
-    async fn component_interaction(
-        &self,
-        ctx: Context,
-        interaction: ComponentInteraction,
-    ) -> Result<(), ComponentInteractionError> {
-        Ok(())
-    }
+    // pub fn component<C: Component>(mut self) -> Self {
+    //     let new = self.component_handlers.insert(k, v).is_none();
+    //     assert!(new, "component {:?} already exists", C::CUSTOM_ID);
+    //     self
+    // }
 
-    async fn modal_interaction(
-        &self,
-        ctx: Context,
-        interaction: ModalInteraction,
-    ) -> Result<(), ModalInteractionError> {
-        Ok(())
-    }
+    // pub fn modal<M: Modal>(mut self) -> Self {
+    //     let new = self.modal_handlers.insert(k, v).is_none();
+    //     assert!(new, "modal {:?} already exists", M::CUSTOM_ID);
+    //     self
+    // }
+
+    // async fn ready(&self, ctx: Context, data_about_bot: Ready) {
+    //     let commands = take(&mut *self.create_commands.lock().unwrap());
+
+    //     // TODO: Add custom update logic again:
+    //     // - update commands globally
+    //     // - only for connected guilds (current)
+    //     // - only for specific guilds (usually from .env)
+
+    //     for guild in data_about_bot.guilds {
+    //         guild.id.set_commands(&ctx, commands.clone()).await.unwrap();
+    //     }
+
+    //     // let commands = serenity::all::Command::set_global_commands(&ctx, commands)
+    //     //     .await
+    //     //     .unwrap();
+    // }
+
+    // async fn interaction(&self, ctx: Context, interaction: Interaction) {
+    //     let result = match interaction {
+    //         Interaction::Command(interaction) => self
+    //             .command_interaction(ctx, interaction, false)
+    //             .await
+    //             .map_err(InteractionError::Command),
+    //         Interaction::Autocomplete(interaction) => self
+    //             .command_interaction(ctx, interaction, true)
+    //             .await
+    //             .map_err(InteractionError::Command),
+    //         Interaction::Component(interaction) => self
+    //             .component_interaction(ctx, interaction)
+    //             .await
+    //             .map_err(InteractionError::Component),
+    //         Interaction::Modal(interaction) => self
+    //             .modal_interaction(ctx, interaction)
+    //             .await
+    //             .map_err(InteractionError::Modal),
+    //         _ => Ok(()),
+    //     };
+
+    //     if let Err(error) = result {
+    //         error!("Error while handling interaction: {error:#?}");
+    //     }
+    // }
+
+    // async fn command_interaction(
+    //     &self,
+    //     ctx: Context,
+    //     mut interaction: CommandInteraction,
+    //     autocomplete: bool,
+    // ) -> Result<(), CommandInteractionError> {
+    //     // TODO: get rid of all unwraps
+    //     let command_handler = self.command_handlers.get(&*interaction.data.name).unwrap();
+    //     if autocomplete {
+    //         let interaction_id = interaction.id;
+    //         // This token is only used for responding to the interaction, so it shouldn't be
+    // needed         // by the user-handler and can be taken.
+    //         let interaction_token = take(&mut interaction.token);
+    //         (command_handler.autocomplete)(&self.bot, &ctx, interaction)
+    //             .await
+    //             .unwrap()
+    //             .execute(ctx, (interaction_id, &interaction_token))
+    //             .await
+    //             .unwrap();
+    //     } else {
+    //         (command_handler.interact)(&self.bot, &ctx, interaction)
+    //             .await
+    //             .unwrap();
+    //     }
+    //     Ok(())
+    // }
+
+    // async fn component_interaction(
+    //     &self,
+    //     ctx: Context,
+    //     interaction: ComponentInteraction,
+    // ) -> Result<(), ComponentInteractionError> {
+    //     // let component_handler = self
+    //     //     .component_handlers
+    //     //     .get(interaction.data.custom_id)
+    //     //     .unwrap();
+    //     Ok(())
+    // }
+
+    // async fn modal_interaction(
+    //     &self,
+    //     ctx: Context,
+    //     interaction: ModalInteraction,
+    // ) -> Result<(), ModalInteractionError> {
+    //     // let modal_handler = self.modal_handlers.get(interaction.data.custom_id).unwrap();
+    //     Ok(())
+    // }
 }
 
 #[derive(Debug, Error)]
@@ -130,13 +207,27 @@ pub enum InteractionError {
 }
 
 #[derive(Debug, Error)]
-pub enum CommandInteractionError {
-    #[error("foo bar")]
-    FooBar,
-}
+pub enum CommandInteractionError {}
 
 #[derive(Debug, Error)]
 pub enum ComponentInteractionError {}
 
 #[derive(Debug, Error)]
 pub enum ModalInteractionError {}
+
+struct CommandHandler<B> {
+    interact: ResolveAndRun<B, ()>,
+    autocomplete: ResolveAndRun<B, CreateAutocompleteResponse>,
+}
+
+type ResolveAndRun<B, R> =
+    for<'a> fn(
+        &'a B,
+        &'a Context,
+        CommandInteraction,
+    ) -> Pin<Box<dyn Future<Output = Result<R, Error>> + Send + 'a>>;
+
+struct CreateCommand;
+struct Context;
+struct CreateAutocompleteResponse;
+struct CommandInteraction;
